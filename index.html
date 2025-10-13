@@ -1,0 +1,1641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Log File Decoder with Analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Favicon -->
+  <link rel="icon" href="./favicon.ico" type="image/x-icon">
+  <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+  <link href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" rel="stylesheet">
+  <style>
+    /* === Base layout === */
+    body { font-family: Arial, sans-serif; }
+    .container { margin: 20px; max-width: 1200px; }
+    #progressWrapper { display:none; width:100%; background:#ddd; border-radius:5px; margin-top:20px; }
+    #progressBar { width:0%; height:20px; background:#4CAF50; text-align:center; line-height:20px; color:#fff; border-radius:5px; }
+    #output { margin-top:20px; }
+    .tabulator-cell pre { margin:0; white-space:pre-wrap; word-break:break-word; }
+    button { margin-top:10px; margin-right:6px; }
+    #errorBanner { display:none; padding:10px; margin-top:10px; border-radius:4px; background:#ffecec; color:#900; }
+
+    /* Brand header (logo + title) */
+    .brand-header{
+      display:flex; align-items:center; gap:12px;
+      margin: 0 0 6px;
+      font-size:24px; font-weight:700; letter-spacing:.2px;
+    }
+    .brand-logo{ height:40px; width:auto; display:block; }
+
+    /* --- Analytics panel (grid, spacing) --- */
+    #analyticsPanel { display:none; margin-top:0; padding:16px; border:1px solid #ddd; border-radius:8px; background:#fafafa; }
+    #analyticsPanel h2 { margin: 0 0 12px; }
+
+    #analyticsPanel .grid{
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px 16px;
+      align-items: start;
+    }
+    #analyticsPanel .grid label { display:block; font-size:12px; color:#444; margin-bottom:4px; }
+
+    #analyticsPanel select,
+    #analyticsPanel input[type="text"],
+    #analyticsPanel input[type="number"],
+    #analyticsPanel input[type="datetime-local"]{
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    #chartWrapper { margin-top:16px; }
+    #statsBox { margin-top:12px; }
+    #statsBox table { border-collapse: collapse; }
+    #statsBox td { padding:4px 8px; border-bottom:1px solid #eee; }
+    #summaryPanel .summary-table { border-collapse: collapse; width: 100%; max-width: 560px; }
+    #summaryPanel .summary-table th, #summaryPanel .summary-table td { padding: 4px 8px; border-bottom: 1px solid #eee; text-align: left; }
+
+    /* Map block */
+    #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
+    #mapMessage { margin-top:10px; }
+
+    /* Outlier controls */
+    .inline-inputs { display:flex; gap:8px; align-items:center; }
+    .inline-inputs input { width: 100%; min-width: 0; }
+    .dim { color:#666; font-size:12px; }
+
+    /* Keep outlier rows full width */
+    #outlierXWrapper, #outlierYWrapper { grid-column: 1 / -1; }
+
+    @media (max-width: 600px){
+      #analyticsPanel .grid{ grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <!-- === Modern theme (non-breaking overrides) === -->
+  <style>
+    :root{
+      --bg: #0b0f14;
+      --bg-elev: #0f141b;
+      --panel: #121821;
+      --text: #e7edf5;
+      --muted: #a8b3c3;
+      --brand: #5aa7ff;
+      --brand-2: #7cd2b1;
+      --success: #10b981;
+      --danger: #ff7a7a;
+      --radius: 12px;
+      --shadow: 0 8px 24px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
+      --gap: 14px;
+      --control-bg: color-mix(in oklab, var(--panel) 75%, black);
+      --drop-bg: repeating-linear-gradient(45deg, rgba(90,167,255,.08) 0 12px, rgba(90,167,255,.12) 12px 24px);
+      --drop-bg-hover: repeating-linear-gradient(45deg, rgba(90,167,255,.14) 0 12px, rgba(90,167,255,.20) 12px 24px);
+    }
+    @media (prefers-color-scheme: light){
+      :root{
+        --bg:#f6f8fb; --bg-elev:#ffffff; --panel:#ffffff; --text:#12161f; --muted:#5b6678;
+        --brand:#2563eb; --brand-2:#16a34a; --success:#16a34a; --danger:#dc2626;
+        --shadow: 0 8px 24px rgba(17,24,39,.08), 0 2px 8px rgba(17,24,39,.06);
+        --control-bg: color-mix(in oklab, var(--panel) 90%, black);
+        --drop-bg: repeating-linear-gradient(45deg, rgba(37,99,235,.06) 0 12px, rgba(37,99,235,.10) 12px 24px);
+        --drop-bg-hover: repeating-linear-gradient(45deg, rgba(37,99,235,.12) 0 12px, rgba(37,99,235,.18) 12px 24px);
+      }
+    }
+
+    body{ background:var(--bg); color:var(--text); }
+    .container{ max-width:1200px; margin: 24px auto; padding: 0 16px; }
+
+    /* Cards via <details> for collapsible sections */
+    details.card{
+      background:var(--panel);
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 0;
+      margin-bottom: 16px;
+    }
+    details.card > summary{
+      list-style:none; cursor:pointer;
+      padding: 14px 16px;
+      font-weight: 700; letter-spacing:.2px;
+      display:flex; align-items:center; gap:8px;
+      user-select:none;
+    }
+    details.card > summary .chev{ transition: transform .15s ease; opacity:.9; }
+    details.card[open] > summary .chev{ transform: rotate(90deg); }
+    .section-body{ padding: 0 16px 16px 16px; }
+
+    /* Inputs & buttons */
+    select, input[type="text"], input[type="number"], input[type="datetime-local"]{
+      background: var(--control-bg);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 10px;
+      padding: 8px 10px;
+      outline:none;
+      transition: border-color .15s ease, box-shadow .15s ease;
+      width:100%;
+      box-sizing:border-box;
+    }
+    select:focus, input:focus{ border-color: var(--brand); box-shadow: 0 0 0 3px rgba(90,167,255,.2); }
+    label{ font-size:12px; color:var(--muted); margin-bottom:4px; display:block; }
+
+    .btn{
+      appearance:none; border:1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, var(--brand), color-mix(in oklab, var(--brand) 80%, black));
+      color:#fff; padding: 8px 12px; border-radius: 10px; cursor:pointer; font-weight:600;
+      box-shadow: var(--shadow); transition: transform .04s ease, filter .15s ease;
+      display:inline-block; text-align:center;
+    }
+    .btn:active{ transform: translateY(1px); }
+    .btn.secondary{ background: var(--bg-elev); color: var(--text); }
+    .btn.primary{ background: linear-gradient(180deg, var(--brand), color-mix(in oklab, var(--brand) 80%, black)); color:#fff; }
+    .btn.success{ background: linear-gradient(180deg, var(--success), color-mix(in oklab, var(--success) 80%, black)); color:#fff; }
+
+    /* Hide the real file inputs (we style their labels as buttons) */
+    .visually-hidden-input{ position:absolute; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none; }
+
+    /* Drop area */
+    #dropArea{
+      border:2px dashed rgba(90,167,255,.55);
+      color:var(--muted);
+      background: var(--drop-bg);
+      border-radius: var(--radius);
+      padding: 18px;
+      text-align:center;
+    }
+    #dropArea.hover{ border-color: var(--brand); background: var(--drop-bg-hover); color: var(--text); }
+
+    #summaryPanel{ background: var(--panel); border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); margin-top:12px; padding:10px; }
+    #analyticsPanel{ background: var(--panel); border:1px solid rgba(255,255,255,.08); border-radius: var(--radius); }
+
+    .tabulator{ background: var(--bg-elev); border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
+    .tabulator .tabulator-header{ background:transparent; border-bottom:1px solid rgba(255,255,255,.08); }
+    #map{ border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
+
+    #progressWrapper{ background: rgba(255,255,255,.08); border-radius: 999px; overflow:hidden; }
+    #progressBar{ background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+
+    .muted{ color: var(--muted); }
+
+    /* Robust form grid for Map controls */
+    .controls-grid{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(220px, 1fr));
+      gap: 12px 16px;
+      align-items:start;
+    }
+    @media (max-width: 1100px){ .controls-grid{ grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
+    @media (max-width: 680px){ .controls-grid{ grid-template-columns: 1fr; } }
+    .controls-grid .control{ display:flex; flex-direction:column; min-width:0; }
+    .controls-grid .control > *:not(label){ width:100%; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="brand-header">
+      <img src="./company_logo.png" alt="Smart Parks logo" class="brand-logo">
+      <span>Log File Decoder</span>
+    </h1>
+    <div id="appVersion" class="muted" style="margin: -2px 0 12px 0;">App version: v1.0</div>
+    <div id="errorBanner"></div>
+
+    <!-- === DECODER SECTION === -->
+    <details class="card" open>
+      <summary><span class="chev">▸</span> Decoder</summary>
+      <div class="section-body">
+        <div class="grid" style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px,1fr));">
+          <div>
+            <label for="decoderSelect">Select built-in decoder</label>
+            <select id="decoderSelect">
+              <option value="./ttn_decoder-v6.15.1.js">v6.15.1</option>
+              <option value="./ttn_decoder-v6.14.0.js">v6.14.0</option>
+              <option value="./ttn_decoder-v6.11.2.js">v6.11.2</option>
+            </select>
+          </div>
+          <div>
+            <label for="customDecoder">Or upload your own decoder (.js)</label>
+            <input type="file" id="customDecoder" accept=".js" class="visually-hidden-input" />
+            <label for="customDecoder" class="btn secondary">Upload decoder (.js)</label>
+            <div id="customDecoderName" class="muted" style="margin-top:6px;">No file selected</div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- === LOAD RAW LOG FILE SECTION === -->
+    <details class="card" open>
+      <summary><span class="chev">▸</span> Load Raw Log file</summary>
+      <div class="section-body">
+        <div class="grid" style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px,1fr));">
+          <div>
+            <label for="fileInput">Select log file</label>
+            <input type="file" id="fileInput" class="visually-hidden-input" />
+            <label for="fileInput" class="btn primary">Choose log file</label>
+            <div id="fileInputName" class="muted" style="margin-top:6px;">No file selected</div>
+          </div>
+          <div>
+            <label class="muted">&nbsp;</label>
+            <div id="dropArea">Or drop a log file here</div>
+          </div>
+
+          <!-- Decode on its own row below the two selectors -->
+          <div style="grid-column: 1 / -1;">
+            <label class="muted">&nbsp;</label>
+            <button id="decodeButton" class="btn success">Decode</button>
+          </div>
+        </div>
+
+        <div id="progressWrapper" style="margin-top:12px;"><div id="progressBar">0%</div></div>
+        <div id="summaryPanel" style="display:none;"></div>
+      </div>
+    </details>
+
+    <!-- === EXPORT SECTION === -->
+    <details class="card" open>
+      <summary><span class="chev">▸</span> Export</summary>
+      <div class="section-body">
+        <button id="exportButton" class="btn secondary" style="display:none;" onclick="exportToJson()">Export JSON</button>
+        <button id="exportCsvButton" class="btn secondary" style="display:none;" onclick="exportToCSV()">Export CSV</button>
+        <button id="exportXlsButton" class="btn secondary" style="display:none;" onclick="exportToXLSX()">Export Excel (.xlsx)</button>
+      </div>
+    </details>
+
+    <!-- === ANALYTICS SECTION === -->
+    <details class="card" open>
+      <summary><span class="chev">▸</span> Simple Analytics (tables, charts & statistics)</summary>
+      <div class="section-body">
+        <div id="analyticsPanel">
+          <div class="grid">
+            <div>
+              <label for="fieldSelect">Field (X)</label>
+              <select id="fieldSelect"></select>
+            </div>
+            <div id="secondFieldWrapper">
+              <label for="fieldSelect2">Second Field (line – optional)</label>
+              <select id="fieldSelect2"><option value="">—</option></select>
+            </div>
+            <div>
+              <label for="fieldSelectY">Field (Y, for scatter – optional)</label>
+              <select id="fieldSelectY"><option value="">—</option></select>
+            </div>
+            <div>
+              <label for="bucketSelect">Time bucket</label>
+              <select id="bucketSelect">
+                <option value="none" selected>None</option>
+                <option value="minute">Minute</option>
+                <option value="hour">Hour</option>
+                <option value="day">Day</option>
+              </select>
+            </div>
+            <div>
+              <label for="aggSelect">Aggregation</label>
+              <select id="aggSelect">
+                <option value="mean" selected>Average</option>
+                <option value="min">Min</option>
+                <option value="max">Max</option>
+                <option value="sum">Sum</option>
+                <option value="count">Count</option>
+                <option value="median">Median</option>
+                <option value="stdev">Std.dev.</option>
+              </select>
+            </div>
+
+            <!-- Outlier filter: X -->
+            <div id="outlierXWrapper">
+              <label>Outlier filter (X)</label>
+              <div class="inline-inputs">
+                <span class="dim">min</span>
+                <input id="minX" type="number" step="any" placeholder="auto" />
+                <span class="dim">max</span>
+                <input id="maxX" type="number" step="any" placeholder="auto" />
+              </div>
+              <div class="dim" id="xRangeHint"></div>
+            </div>
+
+            <!-- Outlier filter: Y (scatter only) -->
+            <div id="outlierYWrapper" style="display:none;">
+              <label>Outlier filter (Y)</label>
+              <div class="inline-inputs">
+                <span class="dim">min</span>
+                <input id="minY" type="number" step="any" placeholder="auto" />
+                <span class="dim">max</span>
+                <input id="maxY" type="number" step="any" placeholder="auto" />
+              </div>
+              <div class="dim" id="yRangeHint"></div>
+            </div>
+
+            <div>
+              <label for="chartType">Chart type</label>
+              <select id="chartType">
+                <option value="line" selected>Line (time series)</option>
+                <option value="bar">Bar</option>
+                <option value="scatter">Scatter (X vs Y)</option>
+                <option value="hist">Histogram</option>
+              </select>
+            </div>
+            <div>
+              <label for="portFilter">Filter: Port</label>
+              <input id="portFilter" type="text" placeholder="e.g. 15" />
+            </div>
+            <div>
+              <label for="startTime">From</label>
+              <input id="startTime" type="datetime-local" />
+            </div>
+            <div>
+              <label for="endTime">To</label>
+              <input id="endTime" type="datetime-local" />
+            </div>
+            <div>
+              <label class="muted">&nbsp;</label>
+              <button id="genBtn" class="btn">Generate</button>
+            </div>
+            <div>
+              <label class="muted">&nbsp;</label>
+              <button id="downloadAggBtn" class="btn secondary">Download result CSV</button>
+            </div>
+          </div>
+
+          <div id="statsBox"></div>
+          <div id="chartWrapper"><canvas id="chartCanvas" height="340"></canvas></div>
+          <div id="aggTable" style="margin-top:12px;"></div>
+        </div>
+      </div>
+    </details>
+
+    <!-- === MAP SECTION === -->
+    <details class="card" open>
+      <summary><span class="chev">▸</span> Map</summary>
+      <div class="section-body">
+        <!-- Hidden (like analytics) until data is decoded -->
+        <div id="mapPanel" style="display:none;">
+          <div class="controls-grid">
+            <div class="control">
+              <label for="mapPortFilter">Filter: Port (Map)</label>
+              <input id="mapPortFilter" type="text" placeholder="e.g. 1 or 15" />
+            </div>
+            <div class="control">
+              <label for="mapStartTime">From (Map)</label>
+              <input id="mapStartTime" type="datetime-local" />
+            </div>
+            <div class="control">
+              <label for="mapEndTime">To (Map)</label>
+              <input id="mapEndTime" type="datetime-local" />
+            </div>
+
+            <div class="control" id="latFieldWrapper">
+              <label for="latField">Latitude field</label>
+              <select id="latField"><option value="">—</option></select>
+            </div>
+            <div class="control" id="lonFieldWrapper">
+              <label for="lonField">Longitude field</label>
+              <select id="lonField"><option value="">—</option></select>
+            </div>
+            <div class="control" id="zeroFilterWrapper">
+              <label>Coordinate filter</label>
+              <label><input type="checkbox" id="ignoreZeroCoords"> Ignore lat=0 or lon=0</label>
+            </div>
+            <div class="control" id="trackWrapper">
+              <label>Track</label>
+              <label><input type="checkbox" id="trackToggle"> Draw line between points</label>
+            </div>
+
+            <div class="control">
+              <label class="muted">&nbsp;</label>
+              <button id="genMapBtn" class="btn">Generate Map</button>
+            </div>
+            <div class="control">
+              <label class="muted">&nbsp;</label>
+              <button id="downloadMapBtn" class="btn secondary">Download Map CSV</button>
+            </div>
+          </div>
+
+          <div id="mapMessage" class="muted"></div>
+          <!-- Hidden until we have valid data -->
+          <div id="map"></div>
+
+          <div id="mapStatsBox" style="margin-top:12px;"></div>
+          <div id="mapTable" style="margin-top:12px;"></div>
+          <p class="muted" style="margin-top:8px;">Tip: Map uses its own Port/From/To filters above.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- === LOG MESSAGES SECTION === -->
+    <details class="card" open>
+      <summary><span class="chev">▸</span> Log messages</summary>
+      <div class="section-body">
+        <p id="logTip" class="muted" style="margin-top:0; display:none;">Tip: click a row to toggle and view the full message content.</p>
+        <div id="output"></div>
+      </div>
+    </details>
+  </div>
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    const APP_VERSION = "v1.1";
+
+    // ---------- Error banner ----------
+    window.onerror = function (msg, src, line, col, err) {
+      console.error("Global error:", msg, "at", src, "line", line, "col", err);
+      const banner = document.getElementById("errorBanner");
+      banner.textContent = "Error: " + msg + " (" + src + ":" + line + ":" + col + ")";
+      banner.style.display = "block";
+    };
+    function showError(msg){ const b=document.getElementById("errorBanner"); b.textContent=msg; b.style.display="block";}
+    function clearError(){ const b=document.getElementById("errorBanner"); b.textContent=""; b.style.display="none";}
+
+    let decodedOutput = [];
+    let logFileName = null;
+    let decoderLoaded = false;
+    let base64Blocks = [];
+    let isDecoding = false;
+
+    const decodeBtn = document.getElementById("decodeButton");
+    const fileInput = document.getElementById("fileInput");
+    const customDecoderInput = document.getElementById("customDecoder");
+    const decoderSelect = document.getElementById("decoderSelect");
+
+    // Version label
+    document.addEventListener("DOMContentLoaded", () => {
+      const v = document.getElementById("appVersion");
+      if (v) v.textContent = "App version: " + APP_VERSION;
+    });
+
+    function loadDecoder(callback){
+      clearError();
+      const existing = document.getElementById("decoderScript");
+      if (existing) existing.remove();
+
+      if (customDecoderInput.files.length > 0) {
+        const file = customDecoderInput.files[0];
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const script = document.createElement("script");
+            script.text = e.target.result;
+            script.id = "decoderScript";
+            document.head.appendChild(script);
+            if (typeof Decoder !== "function") throw new Error("Decoder() not found in custom decoder");
+            decoderLoaded = true; if (callback) callback();
+          } catch (err) { decoderLoaded = false; showError("Custom decoder load failed: " + err.message); }
+        };
+        reader.onerror = () => { decoderLoaded = false; showError("Reading custom decoder failed."); };
+        reader.readAsText(file);
+      } else {
+        const src = decoderSelect.value;
+        const script = document.createElement("script");
+        script.src = src; script.id = "decoderScript";
+        script.onload = () => {
+          try { if (typeof Decoder !== "function") throw new Error("Decoder() not found in " + src);
+            decoderLoaded = true; if (callback) callback();
+          } catch (err) { decoderLoaded = false; showError(err.message); }
+        };
+        script.onerror = () => { decoderLoaded = false; showError("Failed to load decoder: " + src + ". Please place the file next to index.html."); };
+        document.head.appendChild(script);
+      }
+    }
+    decoderSelect.addEventListener("change", () => loadDecoder());
+
+    customDecoderInput.addEventListener("change", () => {
+      const nameEl = document.getElementById('customDecoderName');
+      if(nameEl){ nameEl.textContent = customDecoderInput.files[0] ? customDecoderInput.files[0].name : 'No file selected'; }
+      loadDecoder();
+    });
+
+    fileInput.addEventListener("change", () => {
+      const nameEl = document.getElementById('fileInputName');
+      if(nameEl){ nameEl.textContent = fileInput.files[0] ? fileInput.files[0].name : 'No file selected'; }
+      if (!decoderLoaded) loadDecoder();
+    });
+
+    function base64ToBytes(base64){
+      base64 = base64.replace(/[^A-Za-z0-9+/=]/g, "");
+      return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+    }
+    function updateProgress(idx, total){
+      const pct = total ? Math.floor((idx/total)*100) : 0;
+      const bar = document.getElementById("progressBar");
+      bar.style.width = pct + "%"; bar.textContent = pct + "%";
+    }
+
+    function decodeNextBlock(index){
+      if (index >= base64Blocks.length) {
+        document.getElementById("progressWrapper").style.display = "none";
+        buildTable(decodedOutput);
+        document.getElementById("exportButton").style.display = "inline-block";
+        document.getElementById("exportCsvButton").style.display = "inline-block";
+        document.getElementById("exportXlsButton").style.display = "inline-block";
+        decodeBtn.disabled = false;
+        isDecoding = false;
+        renderMessageSummary(decodedOutput);
+        renderBundledSummary(decodedOutput);
+        prepareAnalytics();
+        return;
+      }
+      try {
+        const block = base64Blocks[index];
+        const bytes = base64ToBytes(block);
+        const port = bytes[0];
+        const remaining = bytes.slice(1);
+        const decoded = Decoder(remaining, port);
+
+        let ts = null;
+        if (decoded != null) {
+          if (decoded.fix_timestamp != null) ts = decoded.fix_timestamp;
+          else if (decoded.timestamp != null) ts = decoded.timestamp;
+          else if (decoded.fix_time != null) ts = decoded.fix_time;
+        }
+
+        decodedOutput.push({ block:index+1, port, timestamp:ts, decodedData:decoded });
+      } catch (err) {
+        decodedOutput.push({ block:index+1, error:"Decoding failed: " + (err && err.message ? err.message : String(err)), rawBlock: base64Blocks[index] });
+      }
+      updateProgress(index+1, base64Blocks.length);
+      setTimeout(() => decodeNextBlock(index+1), 0);
+    }
+
+    function processFile(){
+      if (isDecoding) return;
+      isDecoding = true;
+
+      clearError();
+      if (!decoderLoaded) { loadDecoder(() => processFile()); isDecoding = false; return; }
+      const file = fileInput.files[0];
+      if (!file) { showError("Pick a log file first."); isDecoding = false; return; }
+
+      logFileName = file.name.replace(/\.[^.]+$/, "");
+      decodedOutput = []; base64Blocks = [];
+      decodeBtn.disabled = true;
+      updateProgress(0, 1);
+      document.getElementById("exportButton").style.display = "none";
+      document.getElementById("exportCsvButton").style.display = "none";
+      document.getElementById("exportXlsButton").style.display = "none";
+      document.getElementById("progressWrapper").style.display = "block";
+      document.getElementById("output").innerHTML = "";
+      document.getElementById("analyticsPanel").style.display = "none";
+      document.getElementById("mapPanel").style.display = "none"; // also hide Map until data ready
+      const tip = document.getElementById("logTip"); if (tip) tip.style.display = "none"; // hide tip until we have data
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = (e.target.result || "").trim();
+        if (!text) { showError("Selected file is empty."); decodeBtn.disabled = false; isDecoding = false; return; }
+        base64Blocks = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        updateProgress(0, base64Blocks.length);
+        decodeNextBlock(0);
+      };
+      reader.onerror = () => { showError("Reading log file failed."); decodeBtn.disabled = false; isDecoding = false; };
+      reader.readAsText(file);
+    }
+
+    // ---------- Table ----------
+    function buildTable(data){
+      const flatRows = [];
+      data.forEach((entry) => {
+        if (entry.port === 29 && entry.decodedData && typeof entry.decodedData === "object") {
+          Object.values(entry.decodedData).forEach((sub) => {
+            if (sub && typeof sub === "object" && "port" in sub && "timestamp" in sub) {
+              flatRows.push({
+                timestamp: new Date(sub.timestamp * 1000).toLocaleString(),
+                port: sub.port,
+                data: sub.data != null ? sub.data : {}
+              });
+            }
+          });
+        } else {
+          flatRows.push({
+            timestamp: entry.timestamp != null ? new Date(entry.timestamp * 1000).toLocaleString() : "(unknown)",
+            port: entry.port != null ? entry.port : "(unknown)",
+            data: entry.decodedData != null ? entry.decodedData : (entry.error != null ? entry.error : {})
+          });
+        }
+      });
+
+      // Show or hide the tip depending on data presence
+      const tip = document.getElementById("logTip");
+      if (tip) tip.style.display = flatRows.length ? "block" : "none";
+
+      new Tabulator("#output", {
+        data: flatRows, layout: "fitColumns", height: "700px",
+        columns: [
+          { title: "Timestamp (local)", field: "timestamp", sorter: "string", headerFilter: "input" },
+          { title: "Port", field: "port", sorter: "number", headerFilter: "input" }
+        ],
+        rowFormatter: function (row) {
+          const data = row.getData();
+          const holder = document.createElement("div");
+          const pre = document.createElement("pre");
+          pre.innerText = JSON.stringify(data.data != null ? data.data : {}, null, 2);
+          holder.appendChild(pre); holder.style.padding = "10px"; holder.style.background = "#f8f8f8";
+          row.getElement().appendChild(holder); holder.style.display = "none";
+          row.getElement().addEventListener("click", () => { holder.style.display = holder.style.display === "none" ? "block" : "none"; });
+        }
+      });
+    }
+
+    // ---------- Helpers & schema ----------
+    const KNOWN_GROUPS = {
+      nav:["latitude","longitude","altitude","h_acc_est","pDOP","fixType","SIV","cog","sog","success","hot_retry","cold_retry","ttf","active_t","nav_payload","fix_timestamp","fix_time"],
+      status:["reset","bat","chg","temp","uptime","locked","msg","acc_x","acc_y","acc_z","lr_sat","err_lr","err_lr_join","err_ble","err_ublox","err_acc","err_bat","err_ublox_fix","err_flash","ver_fw_major","ver_fw_minor","ver_hw_major","ver_hw_minor","ver_hw_type","ver_fw_type","sat_support","sat_try","rf_scan","fence"],
+      cmdq:["cmdq_timestamp","cmdq_rr_median","cmdq_rr_median_modesum","cmdq_activity_average","cmdq_activity_max","cmdq_active_min_in_last_hour","cmdq_temp","cmdq_raw_temp","cmdq_h_impedance","cmdq_hrv","cmdq_hrv_raw","cmdq_success"],
+      counts:["N_sat","N_reported","N_wifi_res","N_BT_res"],
+      jsons:["lr_sats_json","ublox_sats_json","wifi_scan_json","bt_scan_json","last_scan_json","rf_scan_json","fence_json","opensky_json","device_msg_hex","memfault_msg_hex"],
+      meta:["device_len","device_msg_len","device_seq","device_retry","memfault_len"]
+    };
+    const PRECISION = { latitude:6, longitude:6, altitude:1, h_acc_est:0, pDOP:1, cog:1, sog:1, temp:1, acc_x:2, acc_y:2, acc_z:2, cmdq_temp:1, cmdq_hrv:2 };
+    const INTEGERISH = new Set(["bat","chg","uptime","SIV","fixType","success","hot_retry","cold_retry","ttf","active_t","reset","locked","msg","lr_sat","err_lr","err_lr_join","err_ble","err_ublox","err_acc","err_bat","err_ublox_fix","err_flash","ver_fw_major","ver_fw_minor","ver_hw_major","ver_hw_minor","ver_hw_type","ver_fw_type","sat_support","sat_try","N_sat","N_reported","N_wifi_res","N_BT_res","device_len","device_msg_len","device_seq","device_retry","memfault_len","rf_scan","fence","cmdq_timestamp","cmdq_rr_median","cmdq_rr_median_modesum","cmdq_activity_average","cmdq_activity_max","cmdq_active_min_in_last_hour","cmdq_raw_temp","cmdq_h_impedance","cmdq_hrv_raw","cmdq_success"]);
+
+    const PORT_TO_TYPE = {
+      1: 'lr_gps', 2: 'ublox_gps', 3: 'settings', 4: 'status', 5: 'lr_sat_data', 6: 'wifi_scan_aggregated',
+      7: 'ble_scan_aggregated', 8: 'rf_scan', 9: 'ublox_sat_data', 10: 'wifi_scan', 11: 'ble_scan', 12: 'fence',
+      13: 'ublox_short_message', 14: 'flash_status', 15: 'ble_cmdq', 16: 'ublox_resend_location',
+      17: 'rf_open_sky_detection', 18: 'timestamp', 19: 'external_switch_detection',
+      20: 'external_switch_detection_status', 27: 'memfault', 28: 'lr_messaging', 29: 'flash_log',
+      30: 'values', 31: 'messages', 32: 'commands'
+    };
+
+    function guessMessageTypeByFields(obj){
+      try{
+        const keys = obj && typeof obj === 'object' ? Object.keys(obj) : [];
+        const has = (...arr)=>arr.some(k=>keys.includes(k));
+        if(has('latitude','longitude','cog','sog','pDOP','SIV','fixType')) return 'gnss_like';
+        if(has('bat','temp','uptime','locked','reset','acc_x','acc_y','acc_z')) return 'status_like';
+        if(has('wifi_scan_json')) return 'wifi_scan';
+        if(has('bt_scan_json')) return 'ble_scan';
+        if(has('rf_scan','rf_scan_json')) return 'rf_scan';
+        if(has('opensky_json')) return 'rf_open_sky_detection';
+        if(has('fence','fence_json')) return 'fence';
+        if(has('memfault_msg_hex')) return 'memfault';
+        return 'unknown';
+      }catch(e){ return 'unknown'; }
+    }
+    function resolveMessageType(port, sampleObj){
+      if (PORT_TO_TYPE[port]) return PORT_TO_TYPE[port];
+      return guessMessageTypeByFields(sampleObj) || 'unknown';
+    }
+
+    function fmtNumber(val, prec){ if(!Number.isFinite(val)) return ""; if(prec!=null) return Number(val).toFixed(prec).replace(/\.?0+$/,''); const s=String(Number(val)); if(/[eE]/.test(s)) return Number(val).toFixed(10).replace(/\.?0+$/,''); return s; }
+    function fmtInteger(val){ if(!Number.isFinite(val)) return ""; return String(Math.trunc(val)); }
+    function csvEscape(value){ if(value==null) return ""; const str=String(value); return /[",\n]/.test(str) ? '"' + str.replace(/"/g,'""') + '"' : str; }
+    function isPlainObject(v){ return v && typeof v === "object" && !Array.isArray(v); }
+    function isNumericKeyObject(obj){ const keys=Object.keys(obj); return keys.length>0 && keys.every(k=>/^\d+$/.test(k)); }
+
+    function flattenShallow(obj, prefix=""){
+      const flat={};
+      for(const [k,v] of Object.entries(obj||{})){
+        const key = prefix ? `${prefix}_${k}` : k;
+        if(v==null){ flat[key]=""; continue; }
+        if(typeof v==="object"){
+          if(Array.isArray(v)){ flat[`${key}_json`]=JSON.stringify(v); }
+          else {
+            const inner=Object.entries(v);
+            if(inner.length && inner.every(([_,vv])=>vv==null || typeof vv!=="object")) inner.forEach(([ik,iv])=>flat[`${key}_${ik}`]=iv);
+            else flat[`${key}_json`]=JSON.stringify(v);
+          }
+        } else { flat[key]=v; }
+      }
+      return flat;
+    }
+    function findNumericContainersDeep(obj, maxDepth=5){
+      const out=[]; (function walk(node,d){ if(!node||d>maxDepth) return;
+        if(Array.isArray(node)){ out.push(node); return; }
+        if(isPlainObject(node)){ if(isNumericKeyObject(node)){ out.push(Object.keys(node).sort((a,b)=>a-b).map(k=>node[k])); return; }
+          for(const v of Object.values(node)) walk(v,d+1);
+        }
+      })(obj,0); return out;
+    }
+
+    // --- CMDQ explode with timestamp_src ---
+    function explodeCmdqItems(tsIsoParent, maybeCmdq){
+      const rows=[]; if(!maybeCmdq) return rows;
+
+      let payload = (maybeCmdq && maybeCmdq.data && isPlainObject(maybeCmdq.data)) ? maybeCmdq.data : maybeCmdq;
+
+      let containers=[];
+      if(Array.isArray(payload)) containers=[payload];
+      else if(isPlainObject(payload) && isNumericKeyObject(payload)) containers=[Object.keys(payload).sort((a,b)=>a-b).map(k=>payload[k])];
+      else containers = findNumericContainersDeep(payload);
+
+      containers.forEach(items=>{
+        items.forEach(item=>{
+          if(!item) return;
+          let tsSec=null, tsSrc="parent";
+          if(item.cmdq_timestamp!=null){ tsSec=item.cmdq_timestamp; tsSrc="cmdq_timestamp"; }
+          else if(item.timestamp!=null){ tsSec=item.timestamp; tsSrc="timestamp"; }
+          else if(item.fix_timestamp!=null){ tsSec=item.fix_timestamp; tsSrc="fix_timestamp"; }
+          else if(item.fix_time!=null){ tsSec=item.fix_time; tsSrc="fix_time"; }
+          const itemIso = tsSec!=null ? new Date(tsSec*1000).toISOString() : tsIsoParent;
+
+          let core=item;
+          while(core && core.data && isPlainObject(core.data) && Object.keys(core).length<=2){ core=core.data; }
+
+          const shallow=flattenShallow(core);
+          const prefixed={}; for(const [k,v] of Object.entries(shallow)){ const col=k.startsWith("cmdq_")?k:`cmdq_${k}`; prefixed[col]=v; }
+          rows.push({ timestamp_utc:itemIso, timestamp_src: tsSec!=null ? tsSrc : "parent", port:15, dataObj:prefixed });
+        });
+      });
+      return rows;
+    }
+
+    // --- Generic normalize (non-cmdq) ---
+    function normalizeForCSV(dataObj, accumSchema){
+      const flat={}; if(!dataObj||typeof dataObj!=="object") return flat;
+      for(const [k,v] of Object.entries(dataObj)){
+        if(v==null){ flat[k]=""; continue; }
+        if(Array.isArray(v)){ flat[`N_${k}`]=v.length; const jsonKey=`${k}_json`; flat[jsonKey]=JSON.stringify(v); accumSchema.add(`N_${k}`); accumSchema.add(jsonKey); }
+        else if(typeof v==="object"){ const jsonKey=`${k}_json`; flat[jsonKey]=JSON.stringify(v); accumSchema.add(jsonKey); }
+        else { flat[k]=v; accumSchema.add(k); }
+      }
+      return flat;
+    }
+
+    function buildSchemaFromDecodersAndData(allRows){
+      const discovered=new Set();
+      for(const row of allRows){ if(row.dataObj) for(const key of Object.keys(row.dataObj)) discovered.add(key); }
+      for(const row of allRows){ if(!row.normalized) continue; for(const key of Object.keys(row.normalized)) discovered.add(key); }
+      const schema=[]; const push=(arr)=>{ for(const k of arr) if(discovered.has(k)) schema.push(k); };
+      push(KNOWN_GROUPS.nav); push(KNOWN_GROUPS.status); push(KNOWN_GROUPS.cmdq); push(KNOWN_GROUPS.counts); push(KNOWN_GROUPS.jsons); push(KNOWN_GROUPS.meta);
+      for(const key of Array.from(discovered).sort()){ if(!schema.includes(key)) schema.push(key); }
+      return schema;
+    }
+
+    function getMessageRows(){
+      const rows=[];
+      decodedOutput.forEach((entry)=>{
+        if(entry.port===29 && entry.decodedData && typeof entry.decodedData==="object"){
+          Object.values(entry.decodedData).forEach((sub)=>{
+            if(!sub||typeof sub!=="object"||!("port" in sub)) return;
+
+            let tsSec=null, tsSrc="parent";
+            if(sub.timestamp!=null){ tsSec=sub.timestamp; tsSrc="timestamp"; }
+            else if(sub.fix_timestamp!=null){ tsSec=sub.fix_timestamp; tsSrc="fix_timestamp"; }
+            else if(sub.fix_time!=null){ tsSec=sub.fix_time; tsSrc="fix_time"; }
+            const tsIsoSub = tsSec!=null ? new Date(tsSec*1000).toISOString() : "";
+
+            if(sub.port===15){
+              const exploded=explodeCmdqItems(tsIsoSub, sub.data);
+              if(exploded.length){ rows.push(...exploded); return; }
+              rows.push({ timestamp_utc:tsIsoSub, timestamp_src: tsIsoSub ? tsSrc : "parent", port:15, dataObj:(sub.data&&typeof sub.data==="object")?sub.data:(sub.data??{}) });
+              return;
+            }
+
+            rows.push({ timestamp_utc:tsIsoSub, timestamp_src: tsIsoSub ? tsSrc : "parent", port:sub.port, dataObj:(sub.data&&typeof sub.data==="object")?sub.data:(sub.data??{}) });
+          });
+          return;
+        }
+
+        if(entry.port===15){
+          const tsIsoParent = entry.timestamp!=null ? new Date(entry.timestamp*1000).toISOString() : "";
+          const exploded=explodeCmdqItems(tsIsoParent, entry.decodedData);
+          if(exploded.length){ rows.push(...exploded); return; }
+          rows.push({ timestamp_utc:tsIsoParent, timestamp_src: tsIsoParent ? "timestamp" : "parent", port:15, dataObj:(entry.decodedData&&typeof entry.decodedData==="object")?entry.decodedData:{} });
+          return;
+        }
+
+        let tsSeconds=null, tsSrc="parent";
+        if(entry.timestamp!=null){ tsSeconds=entry.timestamp; tsSrc="timestamp"; }
+        else if(entry.decodedData){
+          if(entry.decodedData.timestamp!=null){ tsSeconds=entry.decodedData.timestamp; tsSrc="timestamp"; }
+          else if(entry.decodedData.fix_timestamp!=null){ tsSeconds=entry.decodedData.fix_timestamp; tsSrc="fix_timestamp"; }
+          else if(entry.decodedData.fix_time!=null){ tsSeconds=entry.decodedData.fix_time; tsSrc="fix_time"; }
+        }
+        const tsIso = tsSeconds!=null ? new Date(tsSeconds*1000).toISOString() : "";
+        const d = entry.decodedData!=null ? entry.decodedData : (entry.error!=null ? { msg: entry.error } : {});
+        const dataObj = (d && typeof d==="object" && d.data!=null) ? d.data : d;
+
+        rows.push({ timestamp_utc:tsIso, timestamp_src: tsIso ? tsSrc : "parent", port: entry.port!=null ? entry.port : "", dataObj: dataObj || {} });
+      });
+      return rows;
+    }
+
+    // ---------- Exports ----------
+    function exportToJson(){
+      const jsonStr = JSON.stringify(decodedOutput, null, 4);
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = (logFileName || "decoded") + "_decoded.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+    function buildWideCSV(){
+      const rows = getMessageRows();
+      const accum=new Set(); rows.forEach(r => r.normalized = normalizeForCSV(r.dataObj, accum));
+      const schema = buildSchemaFromDecodersAndData(rows);
+      const header = ["timestamp_utc","timestamp_src","port", ...schema];
+      const lines = [header.join(",")];
+
+      rows.forEach(r=>{
+        const out=[csvEscape(r.timestamp_utc), csvEscape(r.timestamp_src||""), csvEscape(r.port)];
+        for(const key of schema){
+          let raw="";
+          if(r.normalized && Object.prototype.hasOwnProperty.call(r.normalized,key)) raw=r.normalized[key];
+          else if(r.dataObj && Object.prototype.hasOwnProperty.call(r.dataObj,key)) raw=r.dataObj[key];
+          const formatted = (raw===""||raw==null) ? "" :
+            (typeof raw==="number" ? (INTEGERISH.has(key)?fmtInteger(raw): (Object.prototype.hasOwnProperty.call(PRECISION,key)?fmtNumber(raw,PRECISION[key]):fmtNumber(raw))) :
+             (typeof raw==="boolean") ? (raw?"1":"0") : String(raw));
+          out.push(csvEscape(formatted));
+        }
+        lines.push(out.join(","));
+      });
+      return lines.join("\n");
+    }
+    function exportToCSV(){
+      const csv = buildWideCSV();
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = (logFileName || "decoded") + "_decoded.csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+    function excelSerialFromISO(iso){ if(!iso) return null; const t = Date.parse(iso); if (isNaN(t)) return null; return t / 86400000 + 25569; }
+    function exportToXLSX(){
+      const rows = getMessageRows();
+      const accum=new Set();
+      const normalizedRows = rows.map(r => ({ ...r, normalized: normalizeForCSV(r.dataObj, accum) }));
+      const schema = buildSchemaFromDecodersAndData(normalizedRows);
+      const header = ["timestamp_utc","timestamp_src","port", ...schema];
+
+      const aoa = []; aoa.push(header);
+      function toExcelNumber(key, raw){
+        if(raw==="" || raw==null) return "";
+        if(INTEGERISH.has(key)){ const n = Number(raw); return Number.isFinite(n) ? Math.trunc(n) : raw; }
+        if(Object.prototype.hasOwnProperty.call(PRECISION,key)){ const n = Number(raw); if(!Number.isFinite(n)) return raw; const f = Math.pow(10, PRECISION[key]); return Math.round(n*f)/f; }
+        const n = Number(raw);
+        if(typeof raw==="number" || (typeof raw==="string" && raw!=="" && Number.isFinite(n) && !/^0[0-9]/.test(raw))) return n;
+        return raw;
+      }
+      normalizedRows.forEach(r=>{
+        const row = [];
+        const serial = excelSerialFromISO(r.timestamp_utc);
+        row.push(serial == null ? "" : { v: serial, t: 'n', z: 'yyyy-mm-dd hh:mm:ss' });
+        row.push(r.timestamp_src || ""); row.push(r.port);
+        for (const key of schema){
+          let raw = "";
+          if (r.normalized && Object.prototype.hasOwnProperty.call(r.normalized,key)) raw = r.normalized[key];
+          else if (r.dataObj && Object.prototype.hasOwnProperty.call(r.dataObj,key)) raw = r.dataObj[key];
+          let formatted = raw;
+          if (raw !== "" && raw != null) {
+            if (typeof raw === "number") {
+              formatted = INTEGERISH.has(key) ? Math.trunc(raw) :
+                          (Object.prototype.hasOwnProperty.call(PRECISION,key) ? Number(fmtNumber(raw, PRECISION[key])) : Number(fmtNumber(raw)));
+            } else if (typeof raw === "boolean") { formatted = raw ? 1 : 0; }
+          }
+          row.push(toExcelNumber(key, formatted));
+        }
+        aoa.push(row);
+      });
+
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = header.map(h => h==="timestamp_utc" ? {wch:22} : (h==="latitude"||h==="longitude" ? {wch:12} : (h==="port" ? {wch:6} : {wch:14})));
+      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      XLSX.utils.book_append_sheet(wb, ws, "decoded");
+      XLSX.writeFile(wb, (logFileName || "decoded") + "_decoded.xlsx");
+    }
+
+    // ---------- Drag & drop ----------
+    const dropArea = document.getElementById("dropArea");
+    dropArea.addEventListener("dragover", (e)=>{ e.preventDefault(); dropArea.classList.add("hover"); });
+    dropArea.addEventListener("dragleave", ()=>{ dropArea.classList.remove("hover"); });
+    dropArea.addEventListener("drop", (e)=>{
+      e.preventDefault(); dropArea.classList.remove("hover");
+      if (e.dataTransfer.files.length > 0) {
+        fileInput.files = e.dataTransfer.files;
+        const nameEl = document.getElementById('fileInputName');
+        if(nameEl){ nameEl.textContent = fileInput.files[0] ? fileInput.files[0].name : 'No file selected'; }
+        if (!decoderLoaded) loadDecoder();
+      }
+    });
+
+    decodeBtn.addEventListener("click", processFile);
+    window.addEventListener("DOMContentLoaded", () => { loadDecoder(); });
+
+    // =========================
+    //    ANALYTICS MODULE
+    // =========================
+    let analyticsCache = null;
+    let chartRef = null;
+    let aggTableRef = null;
+
+    // Map globals
+    let mapRef = null;
+    let mapPointsLayer = null;
+    let mapTrackLayer = null;
+    let mapCanvasRenderer = null;
+    let mapTableRef = null;
+
+    // Outlier auto-range flags
+    let needRecalcX = true, needRecalcY = true;
+
+    function floorToBucketLocal(d, bucket){
+      const dt = new Date(d);
+      if (bucket === 'minute') { dt.setSeconds(0, 0); }
+      else if (bucket === 'hour') { dt.setMinutes(0, 0, 0); }
+      else if (bucket === 'day') { dt.setHours(0, 0, 0, 0); }
+      return dt;
+    }
+
+    function prepareAnalytics(){
+      const rows = getMessageRows();
+      const accum = new Set();
+      const normalized = rows.map(r => ({...r, normalized: normalizeForCSV(r.dataObj, accum)}));
+      const schema = buildSchemaFromDecodersAndData(normalized);
+
+      const numericFields = [];
+      schema.forEach(k => {
+        for(const r of normalized){
+          const v = (r.normalized && Object.prototype.hasOwnProperty.call(r.normalized,k)) ? r.normalized[k] :
+                    (r.dataObj && Object.prototype.hasOwnProperty.call(r.dataObj,k) ? r.dataObj[k] : undefined);
+          if (typeof v === 'number' && isFinite(v)) { numericFields.push(k); break; }
+        }
+      });
+
+      analyticsCache = { rows: normalized, schema, numericFields };
+      buildAnalyticsUI(numericFields);
+
+      // Show panels only after data is ready
+      document.getElementById('analyticsPanel').style.display = 'block';
+      const mapPanel = document.getElementById('mapPanel');
+      if (mapPanel) mapPanel.style.display = 'block';
+
+      const defaults = ["bat","temp","SIV","h_acc_est","cmdq_activity_average","cmdq_hrv"];
+      for(const k of defaults){ if(numericFields.includes(k)){ document.getElementById('fieldSelect').value = k; break; } }
+      needRecalcX = true; needRecalcY = true;
+      generateAnalysis();
+    }
+
+    function resetOutlierX(){
+      const minXEl = document.getElementById('minX');
+      const maxXEl = document.getElementById('maxX');
+      if(minXEl) minXEl.value = '';
+      if(maxXEl) maxXEl.value = '';
+      const hint = document.getElementById('xRangeHint');
+      if(hint) hint.textContent = 'auto range will be computed from data';
+      needRecalcX = true;
+    }
+    function resetOutlierY(){
+      const minYEl = document.getElementById('minY');
+      const maxYEl = document.getElementById('maxY');
+      if(minYEl) minYEl.value = '';
+      if(maxYEl) maxYEl.value = '';
+      const hint = document.getElementById('yRangeHint');
+      if(hint) hint.textContent = 'auto range will be computed from data';
+      needRecalcY = true;
+    }
+
+    function buildAnalyticsUI(numericFields){
+      const selX = document.getElementById('fieldSelect');
+      const sel2 = document.getElementById('fieldSelect2');
+      const selY = document.getElementById('fieldSelectY');
+      const selLat = document.getElementById('latField');
+      const selLon = document.getElementById('lonField');
+      selX.innerHTML = '';
+      sel2.innerHTML = '<option value="">—</option>';
+      selY.innerHTML = '<option value="">—</option>';
+      if(selLat) selLat.innerHTML = '<option value="">—</option>';
+      if(selLon) selLon.innerHTML = '<option value="">—</option>';
+      numericFields.forEach(k => {
+        const o1 = document.createElement('option'); o1.value=k; o1.textContent=k; selX.appendChild(o1);
+        const o2a = document.createElement('option'); o2a.value=k; o2a.textContent=k; sel2.appendChild(o2a);
+        const o2b = document.createElement('option'); o2b.value=k; o2b.textContent=k; selY.appendChild(o2b);
+        if(selLat){ const o3 = document.createElement('option'); o3.value=k; o3.textContent=k; selLat.appendChild(o3); }
+        if(selLon){ const o4 = document.createElement('option'); o4.value=k; o4.textContent=k; selLon.appendChild(o4); }
+      });
+
+      // Hook up buttons
+      document.getElementById('genBtn').onclick = generateAnalysis;
+      document.getElementById('downloadAggBtn').onclick = downloadAggregateCSV;
+      const ct = document.getElementById('chartType');
+      if(ct){ ct.onchange = () => { updateChartUI(); toggleOutlierUI(); }; }
+      updateChartUI();
+      toggleOutlierUI();
+
+      const genMapBtn = document.getElementById('genMapBtn');
+      if(genMapBtn){ genMapBtn.onclick = generateMap; }
+      const dlMapBtn = document.getElementById('downloadMapBtn');
+      if(dlMapBtn){ dlMapBtn.onclick = downloadMapCSV; }
+
+      // Reset outlier ranges when fields change
+      if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); }; }
+      if(selY){ selY.onchange = () => { resetOutlierY(); toggleOutlierUI(); }; }
+    }
+
+    function updateChartUI(){
+      const ct = document.getElementById('chartType').value;
+      const isLine = ct === 'line';
+      const y2W = document.getElementById('secondFieldWrapper');
+      if(y2W) y2W.style.display = isLine ? 'block' : 'none';
+    }
+
+    function parseLocalDateTimeInput(el){
+      if(!el.value) return null;
+      const d = new Date(el.value);
+      if (isNaN(d.getTime())) return null;
+      return d;
+    }
+
+    function getFilters(){
+      const p = document.getElementById('portFilter').value.trim();
+      const start = parseLocalDateTimeInput(document.getElementById('startTime'));
+      const end = parseLocalDateTimeInput(document.getElementById('endTime'));
+      return { port: p || null, start, end };
+    }
+    function getMapFilters(){
+      const p = document.getElementById('mapPortFilter').value.trim();
+      const start = parseLocalDateTimeInput(document.getElementById('mapStartTime'));
+      const end = parseLocalDateTimeInput(document.getElementById('mapEndTime'));
+      return { port: p || null, start, end };
+    }
+
+    function filterRows(rows, filters){
+      return rows.filter(r => {
+        if(filters.port && String(r.port) !== String(filters.port)) return false;
+        const t = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
+        if(filters.start && (!t || t < filters.start)) return false;
+        if(filters.end && (!t || t > filters.end)) return false;
+        return true;
+      });
+    }
+
+    function numericValue(r, field){
+      const v = (r.normalized && Object.prototype.hasOwnProperty.call(r.normalized, field)) ? r.normalized[field]
+              : (r.dataObj && Object.prototype.hasOwnProperty.call(r.dataObj, field) ? r.dataObj[field] : undefined);
+      return (typeof v === 'number' && isFinite(v)) ? v : null;
+    }
+
+    function summarize(values){
+      const n = values.length;
+      if(!n) return { n:0 };
+      const sorted = values.slice().sort((a,b)=>a-b);
+      return {
+        n,
+        min: sorted[0],
+        p5: ss.quantileSorted(sorted, 0.05),
+        median: ss.medianSorted(sorted),
+        mean: ss.mean(sorted),
+        p95: ss.quantileSorted(sorted, 0.95),
+        max: sorted[sorted.length-1],
+        stdev: n>1 ? ss.standardDeviation(sorted) : 0,
+      };
+    }
+
+    function aggArray(arr, agg){
+      if(!arr.length) return null;
+      switch(agg){
+        case 'min': return Math.min(...arr);
+        case 'max': return Math.max(...arr);
+        case 'sum': return arr.reduce((a,b)=>a+b,0);
+        case 'count': return arr.length;
+        case 'median': return ss.median(arr);
+        case 'stdev': return arr.length>1 ? ss.standardDeviation(arr) : 0;
+        case 'mean': default: return ss.mean(arr);
+      }
+    }
+
+    function toggleOutlierUI(){
+      const ct = document.getElementById('chartType').value;
+      const isScatter = ct === 'scatter';
+      const ySelected = !!document.getElementById('fieldSelectY').value;
+      const xWrap = document.getElementById('outlierXWrapper');
+      const yWrap = document.getElementById('outlierYWrapper');
+      if(xWrap) xWrap.style.display = 'block';
+      if(yWrap) yWrap.style.display = (isScatter && ySelected) ? 'block' : 'none';
+    }
+
+    function chooseTimeUnit(points){
+      if(!points || !points.length) return 'hour';
+      const spanMs = points[points.length-1].x - points[0].x;
+      const day = 86400000;
+      if (spanMs < 2*60*60*1000) return 'minute';
+      if (spanMs < 2*day) return 'hour';
+      return 'day';
+    }
+
+    function renderChart({type, labels, data, label}){
+      const ctx = document.getElementById('chartCanvas').getContext('2d');
+      if(chartRef){ chartRef.destroy(); chartRef = null; }
+      let dataset;
+      if(type==='scatter'){
+        dataset = [{ label, data, showLine:false }];
+      } else {
+        dataset = [{ label, data }];
+      }
+      chartRef = new Chart(ctx, {
+        type: type==='scatter' ? 'scatter' : (type==='bar' ? 'bar' : 'line'),
+        data: { labels, datasets: dataset },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          scales: type==='scatter' ? { x: { type: 'linear' }, y: { type: 'linear' } } : { x: { type: 'category' }, y: { type: 'linear' } },
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  if (ctx.chart.config.type === 'scatter') {
+                    const x = ctx.parsed.x, y = ctx.parsed.y;
+                    return 'x: ' + fmtNumber(x) + '  y: ' + fmtNumber(y);
+                  } else {
+                    const y = ctx.parsed.y, l = ctx.label || '';
+                    return (l ? l + ' — ' : '') + fmtNumber(y);
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTimeLineMulti({ points1, label1, points2=null, label2=null }){
+      const ctx = document.getElementById('chartCanvas').getContext('2d');
+      if(chartRef){ chartRef.destroy(); chartRef = null; }
+      const p1 = (points1||[]).filter(p => Number.isFinite(p.x) && p.y != null);
+      const p2 = (points2||[]).filter(p => Number.isFinite(p.x) && p.y != null);
+      const all = p2.length ? p1.concat(p2).sort((a,b)=>a.x - b.x) : p1;
+
+      const ds = [{
+        label: label1 || 'Series 1',
+        data: p1,
+        yAxisID: 'y',
+        borderColor: '#1f77b4',
+        backgroundColor: 'rgba(31,119,180,0.15)',
+        pointRadius: 0, borderWidth: 2
+      }];
+      if(p2.length){
+        ds.push({
+          label: label2 || 'Series 2',
+          data: p2,
+          yAxisID: 'y1',
+          borderColor: '#d62728',
+          backgroundColor: 'rgba(214,39,40,0.1)',
+          pointRadius: 0, borderWidth: 2
+        });
+      }
+
+      chartRef = new Chart(ctx, {
+        type: 'line',
+        data: { datasets: ds },
+        options: {
+          parsing: false, responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          scales: {
+            x: { type: 'time', time: { unit: chooseTimeUnit(all) } },
+            y: { type: 'linear', position: 'left' },
+            y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } }
+          },
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                title: (items)=> { const x = items[0]?.parsed?.x; return Number.isFinite(x) ? new Date(x).toLocaleString() : ''; },
+                label: (ctx)=> `${ctx.dataset.label}: ${fmtNumber(ctx.parsed.y)}`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderTimeBar({ points, label }){
+      const ctx = document.getElementById('chartCanvas').getContext('2d');
+      if(chartRef){ chartRef.destroy(); chartRef = null; }
+      const pts = (points||[]).filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b)=>a.x - b.x);
+      chartRef = new Chart(ctx, {
+        type: 'bar',
+        data: { datasets: [{ label: label || 'Series', data: pts, parsing: false }] },
+        options: {
+          parsing: false, responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          scales: { x: { type: 'time', time: { unit: chooseTimeUnit(pts) } }, y: { type: 'linear' } },
+          plugins: {
+            legend: { display: true, position: 'top' },
+            tooltip: {
+              callbacks: {
+                title: (items)=> { const x = items[0]?.parsed?.x; return Number.isFinite(x) ? new Date(x).toLocaleString() : ''; },
+                label: (ctx)=> `${ctx.dataset.label}: ${fmtNumber(ctx.parsed.y)}`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderStatsBox(values, field){
+      const box = document.getElementById('statsBox');
+      if(!values || !values.length){ box.innerHTML = '<em>No data for statistics.</em>'; return; }
+      const s = summarize(values);
+      const prec = Object.prototype.hasOwnProperty.call(PRECISION, field) ? PRECISION[field] : null;
+      const f = (x)=> (typeof x==='number') ? fmtNumber(x, prec) : (x==null?'':String(x));
+      box.innerHTML = `
+        <h3>Statistics for <code>${field}</code></h3>
+        <table>
+          <tr><td>N</td><td>${s.n}</td></tr>
+          <tr><td>Min</td><td>${f(s.min)}</td></tr>
+          <tr><td>P5</td><td>${f(s.p5)}</td></tr>
+          <tr><td>Median</td><td>${f(s.median)}</td></tr>
+          <tr><td>Average</td><td>${f(s.mean)}</td></tr>
+          <tr><td>P95</td><td>${f(s.p95)}</td></tr>
+          <tr><td>Max</td><td>${f(s.max)}</td></tr>
+          <tr><td>Std.dev.</td><td>${f(s.stdev)}</td></tr>
+        </table>`;
+    }
+
+    function renderAggTable(rows, columns){
+      const holder = document.getElementById('aggTable');
+      holder.innerHTML = '';
+      if(aggTableRef){ try { aggTableRef.destroy(); } catch(e){} aggTableRef = null; }
+      if(!columns || !columns.length){ return; }
+      aggTableRef = new Tabulator('#aggTable', {
+        data: rows, layout: 'fitColumns', height: '360px', columns: columns
+      });
+    }
+    function downloadAggregateCSV(){ if(!aggTableRef){ showError('No result table to download.'); return; } aggTableRef.download('csv', (logFileName || 'decoded') + '_analysis.csv'); }
+
+    function generateAnalysis(){
+      if(!analyticsCache) return;
+      const { rows } = analyticsCache;
+
+      const fieldX = document.getElementById('fieldSelect').value;
+      const field2 = document.getElementById('fieldSelect2').value || '';
+      const fieldY = document.getElementById('fieldSelectY').value || null;
+      const bucket = document.getElementById('bucketSelect').value;
+      const agg = document.getElementById('aggSelect').value;
+      const chartType = document.getElementById('chartType').value;
+      const filters = getFilters();
+
+      let fr0 = filterRows(rows, filters);
+
+      const valuesXAll = fr0.map(r => numericValue(r, fieldX)).filter(v=>v!=null);
+      const valuesYAll = (chartType==='scatter' && fieldY) ? fr0.map(r => numericValue(r, fieldY)).filter(v=>v!=null) : [];
+
+      const minXEl = document.getElementById('minX'), maxXEl = document.getElementById('maxX');
+      const minYEl = document.getElementById('minY'), maxYEl = document.getElementById('maxY');
+
+      if(minXEl && maxXEl && (needRecalcX || !minXEl.value || !maxXEl.value)){
+        if(valuesXAll.length){
+          const min = Math.min(...valuesXAll), max = Math.max(...valuesXAll);
+          minXEl.value = String(min); maxXEl.value = String(max);
+          const hint = document.getElementById('xRangeHint'); if(hint) hint.textContent = `auto range from data: [${fmtNumber(min)}, ${fmtNumber(max)}]`;
+        } else { minXEl.value = ''; maxXEl.value = ''; const h=document.getElementById('xRangeHint'); if(h) h.textContent='no numeric values found'; }
+        needRecalcX = false;
+      }
+      if(chartType==='scatter' && fieldY && minYEl && maxYEl && (needRecalcY || !minYEl.value || !maxYEl.value)){
+        if(valuesYAll.length){
+          const min = Math.min(...valuesYAll), max = Math.max(...valuesYAll);
+          minYEl.value = String(min); maxYEl.value = String(max);
+          const hint = document.getElementById('yRangeHint'); if(hint) hint.textContent = `auto range from data: [${fmtNumber(min)}, ${fmtNumber(max)}]`;
+        } else { minYEl.value = ''; maxYEl.value = ''; const h=document.getElementById('yRangeHint'); if(h) h.textContent='no numeric values found'; }
+        needRecalcY = false;
+      }
+
+      let fr = fr0;
+      if(minXEl && maxXEl){
+        const minX = parseFloat(minXEl.value), maxX = parseFloat(maxXEl.value);
+        const useX = Number.isFinite(minX) && Number.isFinite(maxX);
+        fr = fr.filter(r => { const vx = numericValue(r, fieldX); return useX ? (vx!=null && vx>=minX && vx<=maxX) : (vx!=null); });
+      }
+      if(chartType==='scatter' && fieldY && minYEl && maxYEl){
+        const minY = parseFloat(minYEl.value), maxY = parseFloat(maxYEl.value);
+        const useY = Number.isFinite(minY) && Number.isFinite(maxY);
+        fr = fr.filter(r => { const vy = numericValue(r, fieldY); return useY ? (vy!=null && vy>=minY && vy<=maxY) : (vy!=null); });
+      }
+
+      if(chartType === 'scatter' && fieldY){
+        const tableData = [], data = [];
+        fr.forEach(r => {
+          const x = numericValue(r, fieldX), y = numericValue(r, fieldY);
+          if(x!=null && y!=null){ tableData.push({ timestamp: r.timestamp_utc ? new Date(r.timestamp_utc).toLocaleString() : '', x, y }); data.push({x, y}); }
+        });
+        renderAggTable(tableData, [
+          {title:'Timestamp (local)', field:'timestamp'},
+          {title:fieldX, field:'x'},
+          {title:fieldY, field:'y'}
+        ]);
+        renderChart({ type: 'scatter', labels: [], data, label: `${fieldY} vs ${fieldX}` });
+        renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
+        return;
+      }
+
+      if(chartType === 'hist'){
+        const values = fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null);
+        if(values.length){
+          const min = Math.min(...values), max = Math.max(...values);
+          const bins = Math.min(40, Math.max(8, Math.ceil(Math.sqrt(values.length))));
+          const width = (max - min) / (bins || 1);
+          const counts = new Array(bins).fill(0);
+          values.forEach(v => { const idx = Math.min(bins-1, Math.max(0, Math.floor((v - min)/width))); counts[idx]++; });
+          const labels = counts.map((_,i)=>{ const a = min + i*width, b = a + width; return `${fmtNumber(a, Object.prototype.hasOwnProperty.call(PRECISION,fieldX)?PRECISION[fieldX]:null)}–${fmtNumber(b, Object.prototype.hasOwnProperty.call(PRECISION,fieldX)?PRECISION[fieldX]:null)}`; });
+          const tableData = labels.map((bin,i)=>({ bin, count: counts[i] }));
+          renderAggTable(tableData, [ {title:'Bin', field:'bin'}, {title:'Count', field:'count'} ]);
+          renderChart({ type: 'bar', labels, data: counts, label: `Histogram ${fieldX}` });
+        } else { renderAggTable([], []); renderChart({ type: 'bar', labels:[], data:[], label: `Histogram ${fieldX}` }); }
+        renderStatsBox(values, fieldX);
+        return;
+      }
+
+      if(chartType === 'line'){
+        if(bucket === 'none'){
+          const p1 = fr.map(r => ({ x: Date.parse(r.timestamp_utc), y: numericValue(r, fieldX) }))
+                       .filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b) => a.x - b.x);
+          let p2 = [];
+          if(field2){
+            p2 = fr.map(r => ({ x: Date.parse(r.timestamp_utc), y: numericValue(r, field2) }))
+                   .filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b) => a.x - b.x);
+          }
+
+          const m1 = new Map(p1.map(p=>[p.x,p.y]));
+          const m2 = new Map(p2.map(p=>[p.x,p.y]));
+          const keys = Array.from(new Set([...m1.keys(), ...m2.keys()])).sort((a,b)=>a-b);
+          const cols = [{title:'Timestamp (local)', field:'ts'}];
+          const rows = keys.map(x => ({ ts: new Date(x).toLocaleString(), [fieldX]: m1.get(x) ?? '', ...(field2 ? { [field2]: m2.get(x) ?? '' } : {}) }));
+          cols.push({ title: fieldX, field: fieldX }); if(field2){ cols.push({ title: field2, field: field2 }); }
+          renderAggTable(rows, cols);
+          renderTimeLineMulti({ points1: p1, label1: fieldX, points2: field2 ? p2 : null, label2: field2 || null });
+          renderStatsBox(p1.map(p=>p.y), fieldX);
+          return;
+        } else {
+          const groups = new Map();
+          fr.forEach(r => {
+            const t = r.timestamp_utc ? new Date(r.timestamp_utc) : null; if(!t) return;
+            const k = floorToBucketLocal(t, bucket).getTime();
+            const v1 = numericValue(r, fieldX);
+            const v2 = field2 ? numericValue(r, field2) : null;
+            if(!groups.has(k)) groups.set(k, {a1:[], a2:[]});
+            if(v1!=null) groups.get(k).a1.push(v1);
+            if(field2 && v2!=null) groups.get(k).a2.push(v2);
+          });
+          const keys = Array.from(groups.keys()).sort((a,b)=>a-b);
+          const p1 = keys.map(k => ({ x: k, y: aggArray(groups.get(k).a1, agg) }));
+          const p2 = field2 ? keys.map(k => ({ x: k, y: aggArray(groups.get(k).a2, agg) })) : [];
+
+          const tableLabels = keys.map(k => { const d = new Date(k); return bucket==='day' ? d.toLocaleDateString() : d.toLocaleString(); });
+          const rowsTbl = keys.map((k,i) => ({ bucket_start: tableLabels[i], [fieldX]: p1[i].y, ...(field2 ? { [field2]: p2[i].y } : {}) }));
+          const colsTbl = [{ title:'Bucket start (local)', field:'bucket_start' }, { title:`${agg.toUpperCase()}(${fieldX})`, field: fieldX }];
+          if(field2) colsTbl.push({ title:`${agg.toUpperCase()}(${field2})`, field: field2 });
+          renderAggTable(rowsTbl, colsTbl);
+
+          renderTimeLineMulti({
+            points1: p1, label1: `${agg}(${fieldX}) per ${bucket}`,
+            points2: field2 ? p2 : null, label2: field2 ? `${agg}(${field2}) per ${bucket}` : null
+          });
+          renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
+          return;
+        }
+      }
+
+      if(chartType === 'bar'){
+        if(bucket === 'none'){
+          const points = fr.map(r => ({ x: Date.parse(r.timestamp_utc), y: numericValue(r, fieldX) }))
+                           .filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b) => a.x - b.x);
+          const tableData = points.map(p => ({ timestamp: new Date(p.x).toLocaleString(), value: p.y }));
+          renderAggTable(tableData, [ {title:'Timestamp (local)', field:'timestamp'}, {title:fieldX, field:'value'} ]);
+          renderTimeBar({ points, label: fieldX });
+          renderStatsBox(points.map(p=>p.y), fieldX);
+          return;
+        } else {
+          const groups = new Map();
+          fr.forEach(r => {
+            const t = r.timestamp_utc ? new Date(r.timestamp_utc) : null; if(!t) return;
+            const k = floorToBucketLocal(t, bucket).getTime();
+            const v = numericValue(r, fieldX); if(v==null) return;
+            if(!groups.has(k)) groups.set(k, []);
+            groups.get(k).push(v);
+          });
+          const keys = Array.from(groups.keys()).sort((a,b)=>a-b);
+          const arr = keys.map(k => aggArray(groups.get(k), agg));
+          const points = keys.map((k,i) => ({ x: k, y: arr[i] }));
+
+          const tableLabels = keys.map(k => { const d = new Date(k); return bucket==='day' ? d.toLocaleDateString() : d.toLocaleString(); });
+          const tableData = keys.map((k,i) => ({ bucket_start: tableLabels[i], value: arr[i] }));
+          renderAggTable(tableData, [
+            {title:'Bucket start (local)', field:'bucket_start'},
+            {title:`${agg.toUpperCase()}(${fieldX})`, field:'value'}
+          ]);
+          renderTimeBar({ points, label: `${agg}(${fieldX}) per ${bucket}` });
+          renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
+          return;
+        }
+      }
+    }
+
+    // =========================
+    //          MAP
+    // =========================
+    function pickBestLat(fields){
+      const candidates = ['latitude','lat','gps_lat','lat_deg'];
+      for(const c of candidates){ const f = fields.find(x => x.toLowerCase() === c); if(f) return f; }
+      const partial = fields.find(x => /lat/i.test(x));
+      return partial || '';
+    }
+    function pickBestLon(fields){
+      const candidates = ['longitude','lon','lng','gps_lon','long','lon_deg'];
+      for(const c of candidates){ const f = fields.find(x => x.toLowerCase() === c); if(f) return f; }
+      const partial = fields.find(x => /(lon|lng|long)/i.test(x));
+      return partial || '';
+    }
+
+    function renderMapTable(rows){
+      const holder = document.getElementById('mapTable');
+      holder.innerHTML = '';
+      if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
+      if(!rows || !rows.length){ return; }
+      mapTableRef = new Tabulator('#mapTable', {
+        data: rows, layout: 'fitColumns', height: '300px',
+        columns: [
+          { title: 'Timestamp (local)', field: 'timestamp' },
+          { title: 'Latitude', field: 'latitude' },
+          { title: 'Longitude', field: 'longitude' }
+        ]
+      });
+    }
+    function downloadMapCSV(){ if (mapTableRef) { mapTableRef.download('csv', (logFileName || 'decoded') + '_map.csv'); } else { showError('No map data to download yet. Generate the map first.'); } }
+
+    function ensureOptionSelected(selectEl, value){
+      if(!selectEl || !value) return;
+      const has = Array.from(selectEl.options).some(o => o.value === value);
+      if(!has){
+        const opt = document.createElement('option'); opt.value = value; opt.textContent = value; selectEl.appendChild(opt);
+      }
+      selectEl.value = value;
+    }
+
+    function generateMap(){
+      const msgEl = document.getElementById('mapMessage');
+      const mapEl = document.getElementById('map');
+
+      // Hide map before evaluation
+      if(mapEl) mapEl.style.display = 'none';
+      if(msgEl) msgEl.textContent = '';
+
+      if(!analyticsCache){
+        if(msgEl) msgEl.textContent = 'no valid location data found';
+        return;
+      }
+      const { rows, numericFields } = analyticsCache;
+
+      const filters = getMapFilters();
+      const fr = filterRows(rows, filters);
+
+      const latSel = document.getElementById('latField');
+      const lonSel = document.getElementById('lonField');
+      const pickedLat = (latSel && latSel.value) ? latSel.value : (pickBestLat(numericFields) || 'latitude');
+      const pickedLon = (lonSel && lonSel.value) ? lonSel.value : (pickBestLon(numericFields) || 'longitude');
+
+      // Reflect auto-picked defaults in the dropdowns
+      if(latSel && (!latSel.value || latSel.value === '')) ensureOptionSelected(latSel, pickedLat);
+      if(lonSel && (!lonSel.value || lonSel.value === '')) ensureOptionSelected(lonSel, pickedLon);
+
+      const track = document.getElementById('trackToggle') && document.getElementById('trackToggle').checked;
+      const ignoreZeros = document.getElementById('ignoreZeroCoords') && document.getElementById('ignoreZeroCoords').checked;
+
+      const points = [];
+      fr.forEach(r => {
+        const lat = numericValue(r, pickedLat);
+        const lon = numericValue(r, pickedLon);
+        if(lat==null || lon==null) return;
+        if(lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
+        if(ignoreZeros && (lat === 0 || lon === 0)) return;
+        const ts = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
+        points.push({ lat, lon, ts, tsLabel: ts ? ts.toLocaleString() : '' });
+      });
+
+      if(!points.length){
+        if(msgEl) msgEl.textContent = 'no valid location data found';
+        renderMapTable([]); const statsBox = document.getElementById('mapStatsBox'); if(statsBox) statsBox.innerHTML = '';
+        if(mapRef){ mapPointsLayer.clearLayers(); mapTrackLayer.clearLayers(); }
+        return;
+      }
+
+      // Show map now that we have data
+      if(mapEl) mapEl.style.display = 'block';
+
+      // Table
+      renderMapTable(points.map(p => ({ timestamp: p.tsLabel, latitude: p.lat, longitude: p.lon })));
+
+      // Init map lazily
+      if(!mapRef){
+        mapRef = L.map('map', { preferCanvas: true });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(mapRef);
+        mapCanvasRenderer = L.canvas({ padding: 0.2 });
+        mapPointsLayer = L.layerGroup().addTo(mapRef);
+        mapTrackLayer = L.layerGroup().addTo(mapRef);
+      }
+      mapPointsLayer.clearLayers(); mapTrackLayer.clearLayers();
+
+      // Dots
+      points.forEach(p => {
+        const dot = L.circleMarker([p.lat, p.lon], {
+          radius: 3, fillColor: '#3388ff', fillOpacity: 0.35, stroke: false, renderer: mapCanvasRenderer
+        }).bindPopup(`${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`);
+        mapPointsLayer.addLayer(dot);
+      });
+
+      if(track && points.length >= 2){
+        const seq = points.filter(p => p.ts).sort((a,b) => a.ts - b.ts).map(p => [p.lat, p.lon]);
+        if(seq.length >= 2){ mapTrackLayer.addLayer(L.polyline(seq, { color: '#cc3333', weight: 2, opacity: 0.7, renderer: mapCanvasRenderer })); }
+      }
+
+      setTimeout(() => {
+        if(mapRef){
+          mapRef.invalidateSize();
+          mapRef.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lon])), { padding: [20,20] });
+        }
+      }, 0);
+
+      // Stats
+      const statsBox = document.getElementById('mapStatsBox');
+      if(points.length){
+        const lats = points.map(p=>p.lat), lons = points.map(p=>p.lon);
+        statsBox.innerHTML = `
+          <h3>Map summary</h3>
+          <table>
+            <tr><td>Points</td><td>${points.length}</td></tr>
+            <tr><td>Latitude range</td><td>${fmtNumber(Math.min(...lats),6)} – ${fmtNumber(Math.max(...lats),6)}</td></tr>
+            <tr><td>Longitude range</td><td>${fmtNumber(Math.min(...lons),6)} – ${fmtNumber(Math.max(...lons),6)}</td></tr>
+          </table>`;
+      } else { statsBox.innerHTML = ''; }
+    }
+
+    // ---------- Summary blocks ----------
+    function renderMessageSummary(all){
+      try{
+        const counts = new Map(); const samples = new Map(); let total = 0;
+        (all||[]).forEach(e => {
+          const p = (e && Number.isFinite(e.port)) ? e.port : '(unknown)';
+          counts.set(p, (counts.get(p) || 0) + 1); total++;
+          if(!samples.has(p)){
+            let samp = null;
+            if(e && e.decodedData && typeof e.decodedData === 'object'){
+              samp = (e.decodedData && e.decodedData.data && typeof e.decodedData.data === 'object') ? e.decodedData.data : e.decodedData;
+            }
+            samples.set(p, samp);
+          }
+        });
+        const rows = Array.from(counts.entries()).sort((a,b) => b[1]-a[1]).map(([port,c])=>{
+          const typ = (port==='(unknown)') ? 'unknown' : resolveMessageType(Number(port), samples.get(port));
+          return { port, type: typ, count: c };
+        });
+        const html = `
+          <h3 style="margin:0 0 6px;">Decoded message summary</h3>
+          <div style="font-size:12px;color:#a8b3c3;margin-bottom:8px;">Total messages: ${total} • Unique ports: ${rows.length}</div>
+          <table class="summary-table">
+            <thead><tr><th>Port</th><th>Message type</th><th>Messages</th></tr></thead>
+            <tbody>${rows.map(r=>`<tr><td>${r.port}</td><td>${r.type}</td><td>${r.count}</td></tr>`).join('')}</tbody>
+          </table>`;
+        const el = document.getElementById('summaryPanel');
+        el.innerHTML = html; el.style.display = 'block';
+      } catch(err){ console.error('renderMessageSummary failed', err); }
+    }
+
+    function countCmdqItems(payload){
+      try{
+        if(!payload) return 0;
+        if(Array.isArray(payload)) return payload.filter(x=>x!=null).length;
+        if(typeof isNumericKeyObject === 'function' && isNumericKeyObject(payload)) return Object.keys(payload).length;
+        const containers = (typeof findNumericContainersDeep === 'function') ? findNumericContainersDeep(payload) : [];
+        if(containers && containers.length) return containers.reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
+        return 0;
+      }catch(e){ return 0; }
+    }
+    function renderBundledSummary(all){
+      try{
+        const counts = new Map(); const samples = new Map();
+        (all||[]).forEach(e => {
+          if(!e || e.port !== 29 || !e.decodedData || typeof e.decodedData !== 'object') return;
+          Object.values(e.decodedData).forEach(sub => {
+            if(!sub || typeof sub !== 'object') return;
+            const p = (sub && Number.isFinite(sub.port)) ? sub.port : '(unknown)';
+            let add = 1; if(p === 15){ add = countCmdqItems(sub.data); if(!add) add = 1; }
+            counts.set(p, (counts.get(p)||0) + add);
+            if(!samples.has(p)){
+              const samp = (sub && sub.data && typeof sub.data === 'object') ? sub.data : sub;
+              samples.set(p, samp);
+            }
+          });
+        });
+        const rows = Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).map(([port,c])=>{
+          const typ = (port==='(unknown)') ? 'unknown' : resolveMessageType(Number(port), samples.get(port));
+          return { port, type: typ, count: c };
+        });
+        const el = document.getElementById('summaryPanel'); if(!el) return;
+        if(!rows.length){ el.innerHTML += ''; el.style.display = 'block'; return; }
+        const html = `
+          <h3 style="margin:12px 0 6px;">Bundled messages inside port 29</h3>
+          <div style="font-size:12px;color:#a8b3c3;margin-bottom:8px;">Counts of inner messages (cmdq items counted individually).</div>
+          <table class="summary-table">
+            <thead><tr><th>Inner Port</th><th>Message type</th><th>Messages</th></tr></thead>
+            <tbody>${rows.map(r=>`<tr><td>${r.port}</td><td>${r.type}</td><td>${r.count}</td></tr>`).join('')}</tbody>
+          </table>`;
+        el.innerHTML += html; el.style.display = 'block';
+      }catch(err){ console.error('renderBundledSummary failed', err); }
+    }
+  </script>
+</body>
+</html>
