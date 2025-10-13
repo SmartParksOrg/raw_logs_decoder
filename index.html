@@ -1168,7 +1168,9 @@
         backgroundColor: 'rgba(31,119,180,0.15)',
         pointRadius: 0, borderWidth: 2
       }];
-      if(p2.length){
+      const hasSecondary = p2.length > 0;
+
+      if(hasSecondary){
         ds.push({
           label: label2 || 'Series 2',
           data: p2,
@@ -1179,17 +1181,21 @@
         });
       }
 
+      const scales = {
+        x: { type: 'time', time: { unit: chooseTimeUnit(all) } },
+        y: { type: 'linear', position: 'left' }
+      };
+      if(hasSecondary){
+        scales.y1 = { type: 'linear', position: 'right', grid: { drawOnChartArea: false } };
+      }
+
       chartRef = new Chart(ctx, {
         type: 'line',
         data: { datasets: ds },
         options: {
           parsing: false, responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'nearest', intersect: false },
-          scales: {
-            x: { type: 'time', time: { unit: chooseTimeUnit(all) } },
-            y: { type: 'linear', position: 'left' },
-            y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false } }
-          },
+          scales,
           plugins: {
             legend: { display: true, position: 'top' },
             tooltip: {
