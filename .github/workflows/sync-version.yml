@@ -6,6 +6,12 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   update-version:
@@ -70,3 +76,35 @@ jobs:
           fi
           BRANCH='${{ github.event.repository.default_branch }}'
           git push origin "HEAD:$BRANCH"
+
+  deploy-pages:
+    needs: update-version
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - name: Prepare site artifact
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
+          cp index.html dist/
+          [ -f favicon.ico ] && cp favicon.ico dist/
+          [ -f company_logo.png ] && cp company_logo.png dist/
+          shopt -s nullglob
+          for file in ttn_decoder-*.js; do
+            cp "$file" dist/
+          done
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
