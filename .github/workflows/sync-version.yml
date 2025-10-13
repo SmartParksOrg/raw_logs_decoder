@@ -1,0 +1,62 @@
+name: Sync App Version
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Capture release version
+        id: prep
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          if [ -z "$VERSION" ]; then
+            echo "Release tag name is required to update the version." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Update version in index.html
+        run: |
+          set -euo pipefail
+          VERSION='${{ steps.prep.outputs.version }}'
+          if ! grep -q "App version:" index.html; then
+            echo "Could not locate App version label in index.html" >&2
+            exit 1
+          fi
+          sed -i -E "s|(App version: )v?[0-9A-Za-z._-]+|\1$VERSION|" index.html
+
+      - name: Commit changes
+        id: commit
+        run: |
+          set -euo pipefail
+          git status --short
+          if git diff --quiet; then
+            echo "No version update required."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION='${{ steps.prep.outputs.version }}'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: sync app version to $VERSION"
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push commit
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.commit.outputs.committed }}" != "true" ]; then
+            echo "No updates to push."
+            exit 0
+          fi
+          git push
