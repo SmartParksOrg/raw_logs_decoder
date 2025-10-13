@@ -70,3 +70,34 @@ jobs:
           fi
           BRANCH='${{ github.event.repository.default_branch }}'
           git push origin "HEAD:$BRANCH"
+
+      - name: Move release tag to synced commit
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          TAG_NAME: ${{ steps.prep.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          if git rev-parse "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            TAG_TYPE=$(git for-each-ref --format="%(objecttype)" "refs/tags/$TAG_NAME")
+            if [ "$TAG_TYPE" = "tag" ]; then
+              # Preserve annotated-tag message if present
+              git for-each-ref --format="%(contents)" "refs/tags/$TAG_NAME" > tag_message.txt
+              git tag -fa "$TAG_NAME" -F tag_message.txt
+              rm -f tag_message.txt
+            else
+              git tag -f "$TAG_NAME"
+            fi
+          else
+            git tag "$TAG_NAME"
+          fi
+          git push --force origin "$TAG_NAME"
+
+      - name: Refresh release metadata
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.prep.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG_NAME" --target "$TAG_NAME"
