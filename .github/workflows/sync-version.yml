@@ -6,14 +6,10 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 jobs:
   update-version:
     runs-on: ubuntu-latest
-    outputs:
-      committed: ${{ steps.commit.outputs.committed }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -106,50 +102,3 @@ jobs:
           set -euo pipefail
           COMMIT_SHA=$(git rev-parse HEAD)
           gh release edit "$TAG_NAME" --target "$COMMIT_SHA"
-
-  deploy-pages:
-    runs-on: ubuntu-latest
-    needs: update-version
-    if: needs.update-version.outputs.committed == 'true'
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          fetch-depth: 0
-
-      - name: Ensure latest default branch
-        run: |
-          set -euo pipefail
-          BRANCH='${{ github.event.repository.default_branch }}'
-          git fetch origin "$BRANCH"
-          git checkout "$BRANCH"
-          git pull --ff-only origin "$BRANCH"
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v4
-
-      - name: Prepare site artifact
-        run: |
-          set -euo pipefail
-          rm -rf dist
-          mkdir -p dist
-          cp index.html dist/
-          [ -f favicon.ico ] && cp favicon.ico dist/
-          [ -f company_logo.png ] && cp company_logo.png dist/
-          shopt -s nullglob
-          for file in ttn_decoder-*.js; do
-            cp "$file" dist/
-          done
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
