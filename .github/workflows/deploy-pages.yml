@@ -35,6 +35,7 @@ jobs:
           cp index.html dist/
           [ -f favicon.ico ] && cp favicon.ico dist/
           [ -f company_logo.png ] && cp company_logo.png dist/
+          [ -f version.txt ] && cp version.txt dist/
           shopt -s nullglob
           for file in ttn_decoder-*.js; do
             cp "$file" dist/

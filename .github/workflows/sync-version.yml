@@ -35,15 +35,11 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Update version in index.html
+      - name: Update version.txt
         run: |
           set -euo pipefail
           VERSION='${{ steps.prep.outputs.version }}'
-          if ! grep -q "App version:" index.html; then
-            echo "Could not locate App version label in index.html" >&2
-            exit 1
-          fi
-          sed -i -E "s|(App version: )v?[0-9A-Za-z._-]+|\1$VERSION|" index.html
+          echo "$VERSION" > version.txt
 
       - name: Commit changes
         id: commit
