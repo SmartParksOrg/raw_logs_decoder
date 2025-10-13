@@ -14,7 +14,16 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
+
+      - name: Ensure latest default branch
+        run: |
+          set -euo pipefail
+          BRANCH='${{ github.event.repository.default_branch }}'
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git pull --ff-only origin "$BRANCH"
 
       - name: Capture release version
         id: prep
@@ -59,4 +68,5 @@ jobs:
             echo "No updates to push."
             exit 0
           fi
-          git push
+          BRANCH='${{ github.event.repository.default_branch }}'
+          git push origin "HEAD:$BRANCH"
