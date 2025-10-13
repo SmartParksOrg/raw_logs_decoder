@@ -462,6 +462,103 @@
     }
     loadAppVersion();
 
+    const DEFAULT_FIELD_GROUP_ORDER = ['nav','status','cmdq','counts','jsons','meta'];
+    const LEGACY_FIELD_GROUPS = {
+      nav:["latitude","longitude","altitude","h_acc_est","pDOP","fixType","SIV","cog","sog","success","hot_retry","cold_retry","ttf","active_t","nav_payload","fix_timestamp","fix_time"],
+      status:["reset","bat","chg","temp","uptime","locked","msg","acc_x","acc_y","acc_z","lr_sat","err_lr","err_lr_join","err_ble","err_ublox","err_acc","err_bat","err_ublox_fix","err_flash","ver_fw_major","ver_fw_minor","ver_hw_major","ver_hw_minor","ver_hw_type","ver_fw_type","sat_support","sat_try","rf_scan","fence"],
+      cmdq:["cmdq_timestamp","cmdq_rr_median","cmdq_rr_median_modesum","cmdq_activity_average","cmdq_activity_max","cmdq_active_min_in_last_hour","cmdq_temp","cmdq_raw_temp","cmdq_h_impedance","cmdq_hrv","cmdq_hrv_raw","cmdq_success"],
+      counts:["N_sat","N_reported","N_wifi_res","N_BT_res"],
+      jsons:["lr_sats_json","ublox_sats_json","wifi_scan_json","bt_scan_json","last_scan_json","rf_scan_json","fence_json","opensky_json","device_msg_hex","memfault_msg_hex"],
+      meta:["device_len","device_msg_len","device_seq","device_retry","memfault_len"]
+    };
+    const LEGACY_FIELD_PRECISION = { latitude:6, longitude:6, altitude:1, h_acc_est:0, pDOP:1, cog:1, sog:1, temp:1, acc_x:2, acc_y:2, acc_z:2, cmdq_temp:1, cmdq_hrv:2 };
+    const LEGACY_INTEGERISH = ["bat","chg","uptime","SIV","fixType","success","hot_retry","cold_retry","ttf","active_t","reset","locked","msg","lr_sat","err_lr","err_lr_join","err_ble","err_ublox","err_acc","err_bat","err_ublox_fix","err_flash","ver_fw_major","ver_fw_minor","ver_hw_major","ver_hw_minor","ver_hw_type","ver_fw_type","sat_support","sat_try","N_sat","N_reported","N_wifi_res","N_BT_res","device_len","device_msg_len","device_seq","device_retry","memfault_len","rf_scan","fence","cmdq_timestamp","cmdq_rr_median","cmdq_rr_median_modesum","cmdq_activity_average","cmdq_activity_max","cmdq_active_min_in_last_hour","cmdq_raw_temp","cmdq_h_impedance","cmdq_hrv_raw","cmdq_success"];
+
+    let FIELD_META = {};
+    let FIELD_GROUPS = new Map();
+    let FIELD_PRECISION = {};
+    let INTEGERISH = new Set();
+
+    function applyFieldMeta(meta){
+      FIELD_META = {};
+      FIELD_GROUPS = new Map();
+      FIELD_PRECISION = { ...LEGACY_FIELD_PRECISION };
+      INTEGERISH = new Set(LEGACY_INTEGERISH);
+
+      DEFAULT_FIELD_GROUP_ORDER.forEach(group=>{
+        const legacyList = LEGACY_FIELD_GROUPS[group] ? [...LEGACY_FIELD_GROUPS[group]] : [];
+        FIELD_GROUPS.set(group, legacyList);
+        legacyList.forEach(field=>{
+          if(!FIELD_META[field]) FIELD_META[field] = { group };
+        });
+      });
+
+      if(meta && typeof meta === 'object'){
+        Object.entries(meta).forEach(([field, info])=>{
+          if(!info || typeof info !== 'object') return;
+          const existing = FIELD_META[field] ? { ...FIELD_META[field] } : {};
+          const merged = { ...existing, ...info };
+          const group = typeof merged.group === 'string' ? merged.group : (existing && existing.group ? existing.group : null);
+          if(group){
+            merged.group = group;
+            if(!FIELD_GROUPS.has(group)){ FIELD_GROUPS.set(group, []); }
+            const arr = FIELD_GROUPS.get(group);
+            if(!arr.includes(field)) arr.push(field);
+          }
+          if(Object.prototype.hasOwnProperty.call(merged, 'precision')){
+            if(merged.precision == null){ delete FIELD_PRECISION[field]; }
+            else { FIELD_PRECISION[field] = merged.precision; }
+          }
+          if(Object.prototype.hasOwnProperty.call(merged, 'isInteger')){
+            if(merged.isInteger){ INTEGERISH.add(field); }
+            else { INTEGERISH.delete(field); }
+          }
+          FIELD_META[field] = merged;
+        });
+      }
+    }
+
+    applyFieldMeta({});
+    async function loadFieldMeta(){
+      try{
+        const resp = await fetch('field-meta.json', { cache: 'no-store' });
+        if(!resp.ok) return;
+        const meta = await resp.json();
+        applyFieldMeta(meta);
+        if (typeof analyticsCache !== 'undefined' && analyticsCache) {
+          try { generateAnalysis(); } catch(err){ console.warn('Failed to refresh analytics after loading field metadata', err); }
+        }
+      } catch(err){
+        console.warn('Failed to load field-meta.json', err);
+      }
+    }
+    loadFieldMeta();
+
+    function getFieldUnitSymbol(field){
+      const meta = FIELD_META[field];
+      if(meta && meta.unit){
+        return meta.unit.symbol || meta.unit.label || "";
+      }
+      return "";
+    }
+    function formatFieldLabel(field){
+      const meta = FIELD_META[field];
+      const base = (meta && meta.label) ? meta.label : field;
+      const unit = getFieldUnitSymbol(field);
+      return unit ? `${base} (${unit})` : base;
+    }
+    function formatAggregateLabel(field, agg=null, suffix=""){
+      const base = formatFieldLabel(field);
+      let label = base;
+      if(agg){
+        label = `${agg.toUpperCase()} ${base}`;
+      }
+      if(suffix){
+        label = `${label} ${suffix}`.trim();
+      }
+      return label.trim();
+    }
+
     // ---------- Error banner ----------
     window.onerror = function (msg, src, line, col, err) {
       console.error("Global error:", msg, "at", src, "line", line, "col", err);
@@ -656,17 +753,6 @@
     }
 
     // ---------- Helpers & schema ----------
-    const KNOWN_GROUPS = {
-      nav:["latitude","longitude","altitude","h_acc_est","pDOP","fixType","SIV","cog","sog","success","hot_retry","cold_retry","ttf","active_t","nav_payload","fix_timestamp","fix_time"],
-      status:["reset","bat","chg","temp","uptime","locked","msg","acc_x","acc_y","acc_z","lr_sat","err_lr","err_lr_join","err_ble","err_ublox","err_acc","err_bat","err_ublox_fix","err_flash","ver_fw_major","ver_fw_minor","ver_hw_major","ver_hw_minor","ver_hw_type","ver_fw_type","sat_support","sat_try","rf_scan","fence"],
-      cmdq:["cmdq_timestamp","cmdq_rr_median","cmdq_rr_median_modesum","cmdq_activity_average","cmdq_activity_max","cmdq_active_min_in_last_hour","cmdq_temp","cmdq_raw_temp","cmdq_h_impedance","cmdq_hrv","cmdq_hrv_raw","cmdq_success"],
-      counts:["N_sat","N_reported","N_wifi_res","N_BT_res"],
-      jsons:["lr_sats_json","ublox_sats_json","wifi_scan_json","bt_scan_json","last_scan_json","rf_scan_json","fence_json","opensky_json","device_msg_hex","memfault_msg_hex"],
-      meta:["device_len","device_msg_len","device_seq","device_retry","memfault_len"]
-    };
-    const PRECISION = { latitude:6, longitude:6, altitude:1, h_acc_est:0, pDOP:1, cog:1, sog:1, temp:1, acc_x:2, acc_y:2, acc_z:2, cmdq_temp:1, cmdq_hrv:2 };
-    const INTEGERISH = new Set(["bat","chg","uptime","SIV","fixType","success","hot_retry","cold_retry","ttf","active_t","reset","locked","msg","lr_sat","err_lr","err_lr_join","err_ble","err_ublox","err_acc","err_bat","err_ublox_fix","err_flash","ver_fw_major","ver_fw_minor","ver_hw_major","ver_hw_minor","ver_hw_type","ver_fw_type","sat_support","sat_try","N_sat","N_reported","N_wifi_res","N_BT_res","device_len","device_msg_len","device_seq","device_retry","memfault_len","rf_scan","fence","cmdq_timestamp","cmdq_rr_median","cmdq_rr_median_modesum","cmdq_activity_average","cmdq_activity_max","cmdq_active_min_in_last_hour","cmdq_raw_temp","cmdq_h_impedance","cmdq_hrv_raw","cmdq_success"]);
-
     const PORT_TO_TYPE = {
       1: 'lr_gps', 2: 'ublox_gps', 3: 'settings', 4: 'status', 5: 'lr_sat_data', 6: 'wifi_scan_aggregated',
       7: 'ble_scan_aggregated', 8: 'rf_scan', 9: 'ublox_sat_data', 10: 'wifi_scan', 11: 'ble_scan', 12: 'fence',
@@ -775,8 +861,17 @@
       const discovered=new Set();
       for(const row of allRows){ if(row.dataObj) for(const key of Object.keys(row.dataObj)) discovered.add(key); }
       for(const row of allRows){ if(!row.normalized) continue; for(const key of Object.keys(row.normalized)) discovered.add(key); }
-      const schema=[]; const push=(arr)=>{ for(const k of arr) if(discovered.has(k)) schema.push(k); };
-      push(KNOWN_GROUPS.nav); push(KNOWN_GROUPS.status); push(KNOWN_GROUPS.cmdq); push(KNOWN_GROUPS.counts); push(KNOWN_GROUPS.jsons); push(KNOWN_GROUPS.meta);
+      const schema=[]; const push=(arr)=>{ if(!arr) return; for(const k of arr) if(discovered.has(k)) schema.push(k); };
+      const seenGroups = new Set();
+      DEFAULT_FIELD_GROUP_ORDER.forEach(group=>{
+        const arr = FIELD_GROUPS.get(group);
+        push(arr);
+        seenGroups.add(group);
+      });
+      FIELD_GROUPS.forEach((arr, group)=>{
+        if(seenGroups.has(group)) return;
+        push(arr);
+      });
       for(const key of Array.from(discovered).sort()){ if(!schema.includes(key)) schema.push(key); }
       return schema;
     }
@@ -851,7 +946,7 @@
           if(r.normalized && Object.prototype.hasOwnProperty.call(r.normalized,key)) raw=r.normalized[key];
           else if(r.dataObj && Object.prototype.hasOwnProperty.call(r.dataObj,key)) raw=r.dataObj[key];
           const formatted = (raw===""||raw==null) ? "" :
-            (typeof raw==="number" ? (INTEGERISH.has(key)?fmtInteger(raw): (Object.prototype.hasOwnProperty.call(PRECISION,key)?fmtNumber(raw,PRECISION[key]):fmtNumber(raw))) :
+            (typeof raw==="number" ? (INTEGERISH.has(key)?fmtInteger(raw): (Object.prototype.hasOwnProperty.call(FIELD_PRECISION,key)?fmtNumber(raw,FIELD_PRECISION[key]):fmtNumber(raw))) :
              (typeof raw==="boolean") ? (raw?"1":"0") : String(raw));
           out.push(csvEscape(formatted));
         }
@@ -877,7 +972,7 @@
       function toExcelNumber(key, raw){
         if(raw==="" || raw==null) return "";
         if(INTEGERISH.has(key)){ const n = Number(raw); return Number.isFinite(n) ? Math.trunc(n) : raw; }
-        if(Object.prototype.hasOwnProperty.call(PRECISION,key)){ const n = Number(raw); if(!Number.isFinite(n)) return raw; const f = Math.pow(10, PRECISION[key]); return Math.round(n*f)/f; }
+        if(Object.prototype.hasOwnProperty.call(FIELD_PRECISION,key)){ const n = Number(raw); if(!Number.isFinite(n)) return raw; const f = Math.pow(10, FIELD_PRECISION[key]); return Math.round(n*f)/f; }
         const n = Number(raw);
         if(typeof raw==="number" || (typeof raw==="string" && raw!=="" && Number.isFinite(n) && !/^0[0-9]/.test(raw))) return n;
         return raw;
@@ -895,7 +990,7 @@
           if (raw !== "" && raw != null) {
             if (typeof raw === "number") {
               formatted = INTEGERISH.has(key) ? Math.trunc(raw) :
-                          (Object.prototype.hasOwnProperty.call(PRECISION,key) ? Number(fmtNumber(raw, PRECISION[key])) : Number(fmtNumber(raw)));
+                          (Object.prototype.hasOwnProperty.call(FIELD_PRECISION,key) ? Number(fmtNumber(raw, FIELD_PRECISION[key])) : Number(fmtNumber(raw)));
             } else if (typeof raw === "boolean") { formatted = raw ? 1 : 0; }
           }
           row.push(toExcelNumber(key, formatted));
@@ -1249,10 +1344,10 @@
       const box = document.getElementById('statsBox');
       if(!values || !values.length){ box.innerHTML = '<em>No data for statistics.</em>'; return; }
       const s = summarize(values);
-      const prec = Object.prototype.hasOwnProperty.call(PRECISION, field) ? PRECISION[field] : null;
+      const prec = Object.prototype.hasOwnProperty.call(FIELD_PRECISION, field) ? FIELD_PRECISION[field] : null;
       const f = (x)=> (typeof x==='number') ? fmtNumber(x, prec) : (x==null?'':String(x));
       box.innerHTML = `
-        <h3>Statistics for <code>${field}</code></h3>
+        <h3>Statistics for ${formatFieldLabel(field)}</h3>
         <table>
           <tr><td>N</td><td>${s.n}</td></tr>
           <tr><td>Min</td><td>${f(s.min)}</td></tr>
@@ -1333,10 +1428,10 @@
         });
         renderAggTable(tableData, [
           {title:'Timestamp (local)', field:'timestamp'},
-          {title:fieldX, field:'x'},
-          {title:fieldY, field:'y'}
+          {title:formatFieldLabel(fieldX), field:'x'},
+          {title:formatFieldLabel(fieldY), field:'y'}
         ]);
-        renderChart({ type: 'scatter', labels: [], data, label: `${fieldY} vs ${fieldX}` });
+        renderChart({ type: 'scatter', labels: [], data, label: `${formatFieldLabel(fieldY)} vs ${formatFieldLabel(fieldX)}` });
         renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
         return;
       }
@@ -1349,11 +1444,11 @@
           const width = (max - min) / (bins || 1);
           const counts = new Array(bins).fill(0);
           values.forEach(v => { const idx = Math.min(bins-1, Math.max(0, Math.floor((v - min)/width))); counts[idx]++; });
-          const labels = counts.map((_,i)=>{ const a = min + i*width, b = a + width; return `${fmtNumber(a, Object.prototype.hasOwnProperty.call(PRECISION,fieldX)?PRECISION[fieldX]:null)}–${fmtNumber(b, Object.prototype.hasOwnProperty.call(PRECISION,fieldX)?PRECISION[fieldX]:null)}`; });
+          const labels = counts.map((_,i)=>{ const a = min + i*width, b = a + width; const prec = Object.prototype.hasOwnProperty.call(FIELD_PRECISION,fieldX)?FIELD_PRECISION[fieldX]:null; return `${fmtNumber(a, prec)}–${fmtNumber(b, prec)}`; });
           const tableData = labels.map((bin,i)=>({ bin, count: counts[i] }));
           renderAggTable(tableData, [ {title:'Bin', field:'bin'}, {title:'Count', field:'count'} ]);
-          renderChart({ type: 'bar', labels, data: counts, label: `Histogram ${fieldX}` });
-        } else { renderAggTable([], []); renderChart({ type: 'bar', labels:[], data:[], label: `Histogram ${fieldX}` }); }
+          renderChart({ type: 'bar', labels, data: counts, label: `Histogram ${formatFieldLabel(fieldX)}` });
+        } else { renderAggTable([], []); renderChart({ type: 'bar', labels:[], data:[], label: `Histogram ${formatFieldLabel(fieldX)}` }); }
         renderStatsBox(values, fieldX);
         return;
       }
@@ -1373,9 +1468,9 @@
           const keys = Array.from(new Set([...m1.keys(), ...m2.keys()])).sort((a,b)=>a-b);
           const cols = [{title:'Timestamp (local)', field:'ts'}];
           const rows = keys.map(x => ({ ts: new Date(x).toLocaleString(), [fieldX]: m1.get(x) ?? '', ...(field2 ? { [field2]: m2.get(x) ?? '' } : {}) }));
-          cols.push({ title: fieldX, field: fieldX }); if(field2){ cols.push({ title: field2, field: field2 }); }
+          cols.push({ title: formatFieldLabel(fieldX), field: fieldX }); if(field2){ cols.push({ title: formatFieldLabel(field2), field: field2 }); }
           renderAggTable(rows, cols);
-          renderTimeLineMulti({ points1: p1, label1: fieldX, points2: field2 ? p2 : null, label2: field2 || null });
+          renderTimeLineMulti({ points1: p1, label1: formatFieldLabel(fieldX), points2: field2 ? p2 : null, label2: field2 ? formatFieldLabel(field2) : null });
           renderStatsBox(p1.map(p=>p.y), fieldX);
           return;
         } else {
@@ -1395,13 +1490,13 @@
 
           const tableLabels = keys.map(k => { const d = new Date(k); return bucket==='day' ? d.toLocaleDateString() : d.toLocaleString(); });
           const rowsTbl = keys.map((k,i) => ({ bucket_start: tableLabels[i], [fieldX]: p1[i].y, ...(field2 ? { [field2]: p2[i].y } : {}) }));
-          const colsTbl = [{ title:'Bucket start (local)', field:'bucket_start' }, { title:`${agg.toUpperCase()}(${fieldX})`, field: fieldX }];
-          if(field2) colsTbl.push({ title:`${agg.toUpperCase()}(${field2})`, field: field2 });
+          const colsTbl = [{ title:'Bucket start (local)', field:'bucket_start' }, { title:formatAggregateLabel(fieldX, agg), field: fieldX }];
+          if(field2) colsTbl.push({ title:formatAggregateLabel(field2, agg), field: field2 });
           renderAggTable(rowsTbl, colsTbl);
 
           renderTimeLineMulti({
-            points1: p1, label1: `${agg}(${fieldX}) per ${bucket}`,
-            points2: field2 ? p2 : null, label2: field2 ? `${agg}(${field2}) per ${bucket}` : null
+            points1: p1, label1: formatAggregateLabel(fieldX, agg, `per ${bucket}`),
+            points2: field2 ? p2 : null, label2: field2 ? formatAggregateLabel(field2, agg, `per ${bucket}`) : null
           });
           renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
           return;
@@ -1413,8 +1508,8 @@
           const points = fr.map(r => ({ x: Date.parse(r.timestamp_utc), y: numericValue(r, fieldX) }))
                            .filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b) => a.x - b.x);
           const tableData = points.map(p => ({ timestamp: new Date(p.x).toLocaleString(), value: p.y }));
-          renderAggTable(tableData, [ {title:'Timestamp (local)', field:'timestamp'}, {title:fieldX, field:'value'} ]);
-          renderTimeBar({ points, label: fieldX });
+          renderAggTable(tableData, [ {title:'Timestamp (local)', field:'timestamp'}, {title:formatFieldLabel(fieldX), field:'value'} ]);
+          renderTimeBar({ points, label: formatFieldLabel(fieldX) });
           renderStatsBox(points.map(p=>p.y), fieldX);
           return;
         } else {
@@ -1434,9 +1529,9 @@
           const tableData = keys.map((k,i) => ({ bucket_start: tableLabels[i], value: arr[i] }));
           renderAggTable(tableData, [
             {title:'Bucket start (local)', field:'bucket_start'},
-            {title:`${agg.toUpperCase()}(${fieldX})`, field:'value'}
+            {title:formatAggregateLabel(fieldX, agg), field:'value'}
           ]);
-          renderTimeBar({ points, label: `${agg}(${fieldX}) per ${bucket}` });
+          renderTimeBar({ points, label: formatAggregateLabel(fieldX, agg, `per ${bucket}`) });
           renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
           return;
         }
