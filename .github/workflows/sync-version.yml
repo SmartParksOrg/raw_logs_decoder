@@ -100,4 +100,5 @@ jobs:
           TAG_NAME: ${{ steps.prep.outputs.version }}
         run: |
           set -euo pipefail
-          gh release edit "$TAG_NAME" --target "$TAG_NAME"
+          COMMIT_SHA=$(git rev-parse HEAD)
+          gh release edit "$TAG_NAME" --target "$COMMIT_SHA"
