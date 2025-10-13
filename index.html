@@ -462,9 +462,9 @@
     }
     loadAppVersion();
 
-    const DEFAULT_FIELD_GROUP_ORDER = ['nav','status','cmdq','counts','jsons','meta'];
+    const DEFAULT_FIELD_GROUP_ORDER = ['gnss','status','cmdq','counts','jsons','meta'];
     const LEGACY_FIELD_GROUPS = {
-      nav:["latitude","longitude","altitude","h_acc_est","pDOP","fixType","SIV","cog","sog","success","hot_retry","cold_retry","ttf","active_t","nav_payload","fix_timestamp","fix_time"],
+      gnss:["latitude","longitude","altitude","h_acc_est","pDOP","fixType","SIV","cog","sog","success","hot_retry","cold_retry","ttf","active_t","nav_payload","fix_timestamp","fix_time"],
       status:["reset","bat","chg","temp","uptime","locked","msg","acc_x","acc_y","acc_z","lr_sat","err_lr","err_lr_join","err_ble","err_ublox","err_acc","err_bat","err_ublox_fix","err_flash","ver_fw_major","ver_fw_minor","ver_hw_major","ver_hw_minor","ver_hw_type","ver_fw_type","sat_support","sat_try","rf_scan","fence"],
       cmdq:["cmdq_timestamp","cmdq_rr_median","cmdq_rr_median_modesum","cmdq_activity_average","cmdq_activity_max","cmdq_active_min_in_last_hour","cmdq_temp","cmdq_raw_temp","cmdq_h_impedance","cmdq_hrv","cmdq_hrv_raw","cmdq_success"],
       counts:["N_sat","N_reported","N_wifi_res","N_BT_res"],
