@@ -440,7 +440,10 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <script>
-    const APP_VERSION = "v1.1";
+    const versionLabel = document.getElementById("appVersion");
+    const APP_VERSION = versionLabel
+      ? versionLabel.textContent.replace(/^App version:\s*/i, "").trim()
+      : "";
 
     // ---------- Error banner ----------
     window.onerror = function (msg, src, line, col, err) {
@@ -464,10 +467,9 @@
     const decoderSelect = document.getElementById("decoderSelect");
 
     // Version label
-    document.addEventListener("DOMContentLoaded", () => {
-      const v = document.getElementById("appVersion");
-      if (v) v.textContent = "App version: " + APP_VERSION;
-    });
+    if (versionLabel && APP_VERSION) {
+      versionLabel.textContent = "App version: " + APP_VERSION;
+    }
 
     function loadDecoder(callback){
       clearError();
