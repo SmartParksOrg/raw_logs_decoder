@@ -177,6 +177,35 @@
     #progressBar{ background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
 
     .muted{ color: var(--muted); }
+    .visual-wrapper{ position: relative; padding-top: 28px; }
+    .copy-icon-btn{
+      position:absolute;
+      top:4px;
+      left:8px;
+      width:28px;
+      height:28px;
+      border:none;
+      border-radius:999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: rgba(17,24,39,0.75);
+      color: var(--text);
+      cursor:pointer;
+      transition: opacity .15s ease, transform .12s ease;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+      opacity:0.82;
+      z-index: 20;
+    }
+    .copy-icon-btn.copied{
+      background: var(--brand);
+      color:#fff;
+      opacity:1;
+    }
+    .copy-icon-btn:hover{ opacity:1; transform: translateY(-1px); }
+    .copy-icon-btn:active{ transform: translateY(0); opacity:0.95; }
+    .copy-icon-btn svg{ width:14px; height:14px; }
+    .copy-icon-btn[disabled]{ cursor: not-allowed; opacity:0.45; box-shadow:none; }
 
     /* Robust form grid for Map controls */
     .controls-grid{
@@ -357,7 +386,14 @@
           </div>
 
           <div id="statsBox"></div>
-          <div id="chartWrapper"><canvas id="chartCanvas" height="340"></canvas></div>
+          <div id="chartWrapper" class="visual-wrapper">
+            <button type="button" id="copyChartBtn" class="copy-icon-btn" title="Copy chart to clipboard" aria-label="Copy chart to clipboard" disabled>
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path d="M6 2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V2Zm2 0v10h10V2H8Zm-4 4a2 2 0 0 1 2-2h1v2H6v8h8v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2Z"/>
+              </svg>
+            </button>
+            <canvas id="chartCanvas" height="340"></canvas>
+          </div>
           <div id="aggTable" style="margin-top:12px;"></div>
         </div>
       </div>
@@ -412,7 +448,14 @@
 
           <div id="mapMessage" class="muted"></div>
           <!-- Hidden until we have valid data -->
-          <div id="map"></div>
+          <div id="mapWrapper" class="visual-wrapper" style="display:none;">
+            <button type="button" id="copyMapBtn" class="copy-icon-btn" title="Copy map to clipboard" aria-label="Copy map to clipboard" disabled>
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path d="M6 2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V2Zm2 0v10h10V2H8Zm-4 4a2 2 0 0 1 2-2h1v2H6v8h8v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2Z"/>
+              </svg>
+            </button>
+            <div id="map"></div>
+          </div>
 
           <div id="mapStatsBox" style="margin-top:12px;"></div>
           <div id="mapTable" style="margin-top:12px;"></div>
@@ -438,9 +481,14 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js"></script>
 
   <script>
     const versionLabel = document.getElementById("appVersion");
+    const copyChartBtn = document.getElementById('copyChartBtn');
+    const copyMapBtn = document.getElementById('copyMapBtn');
+    const copyChartDefaultTitle = copyChartBtn ? copyChartBtn.title : '';
+    const copyMapDefaultTitle = copyMapBtn ? copyMapBtn.title : '';
     let APP_VERSION = "";
 
     async function loadAppVersion(){
@@ -461,6 +509,108 @@
       }
     }
     loadAppVersion();
+
+    function flashCopyButton(btn){
+      if(!btn) return;
+      btn.classList.add('copied');
+      setTimeout(()=>btn.classList.remove('copied'), 1200);
+    }
+
+    function supportsImageClipboard(){
+      return !!(navigator.clipboard && window.ClipboardItem);
+    }
+
+    async function canvasToClipboard(canvas){
+      if(!canvas) throw new Error('Chart is not ready yet.');
+      if(!supportsImageClipboard()) throw new Error('Copy to clipboard not supported in this browser.');
+      const blob = await new Promise((resolve, reject)=>{
+        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not render chart image.')), 'image/png');
+      });
+      if(!blob) throw new Error('No image data generated.');
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
+    }
+
+    async function elementToClipboard(el, background='#0b0f14'){
+      if(!el) throw new Error('Map is not ready yet.');
+      if(!supportsImageClipboard()) throw new Error('Copy to clipboard not supported in this browser.');
+      if(!(window.htmlToImage && typeof window.htmlToImage.toBlob === 'function')){
+        throw new Error('Map copy helper is unavailable.');
+      }
+      const blob = await window.htmlToImage.toBlob(el, {
+        backgroundColor: background,
+        pixelRatio: 2
+      });
+      if(!blob) throw new Error('Could not render map image.');
+      const item = new ClipboardItem({ 'image/png': blob });
+      await navigator.clipboard.write([item]);
+    }
+
+    function setChartCopyEnabled(enabled){
+      if(!copyChartBtn) return;
+      const canCopy = supportsImageClipboard();
+      copyChartBtn.disabled = !(enabled && canCopy);
+      copyChartBtn.title = canCopy && copyChartDefaultTitle ? copyChartDefaultTitle : (!canCopy ? 'Copy to clipboard is not supported in this browser' : copyChartBtn.title);
+      if(!enabled) copyChartBtn.classList.remove('copied');
+    }
+
+    function setMapCopyEnabled(enabled){
+      if(!copyMapBtn) return;
+      const canCopy = supportsImageClipboard();
+      copyMapBtn.disabled = !(enabled && canCopy);
+      copyMapBtn.title = canCopy && copyMapDefaultTitle ? copyMapDefaultTitle : (!canCopy ? 'Copy to clipboard is not supported in this browser' : copyMapBtn.title);
+      if(!enabled) copyMapBtn.classList.remove('copied');
+    }
+
+    setChartCopyEnabled(false);
+    setMapCopyEnabled(false);
+
+    async function handleCopyChart(){
+      if(!copyChartBtn) return;
+      const canvas = document.getElementById('chartCanvas');
+      if(!chartRef || !canvas){
+        showError('Generate the chart first before copying.');
+        return;
+      }
+      const prevDisabled = copyChartBtn.disabled;
+      try{
+        copyChartBtn.disabled = true;
+        await canvasToClipboard(canvas);
+        copyChartBtn.disabled = false;
+        flashCopyButton(copyChartBtn);
+      } catch(err){
+        console.error('Copy chart failed', err);
+        showError('Copy chart failed: ' + (err && err.message ? err.message : err));
+      } finally {
+        copyChartBtn.disabled = prevDisabled;
+      }
+    }
+
+    async function handleCopyMap(){
+      if(!copyMapBtn) return;
+      const mapEl = document.getElementById('map');
+      const mapWrapper = document.getElementById('mapWrapper');
+      if(!mapEl || !mapWrapper || mapWrapper.style.display === 'none' || mapEl.offsetParent === null){
+        showError('Generate the map first before copying.');
+        return;
+      }
+      const prevDisabled = copyMapBtn.disabled;
+      try{
+        copyMapBtn.disabled = true;
+        const bg = getComputedStyle(document.body).backgroundColor || '#0b0f14';
+        await elementToClipboard(mapEl, bg);
+        copyMapBtn.disabled = false;
+        flashCopyButton(copyMapBtn);
+      } catch(err){
+        console.error('Copy map failed', err);
+        showError('Copy map failed: ' + (err && err.message ? err.message : err));
+      } finally {
+        copyMapBtn.disabled = prevDisabled;
+      }
+    }
+
+    if(copyChartBtn){ copyChartBtn.addEventListener('click', handleCopyChart); }
+    if(copyMapBtn){ copyMapBtn.addEventListener('click', handleCopyMap); }
 
     const DEFAULT_FIELD_GROUP_ORDER = ['gnss','status','cmdq','counts','jsons','meta'];
     const LEGACY_FIELD_GROUPS = {
@@ -1224,7 +1374,7 @@
       return 'day';
     }
 
-    function renderChart({type, labels, data, label}){
+    function renderChart({type, labels, data, label, title='', xLabel='', yLabel='' }){
       const ctx = document.getElementById('chartCanvas').getContext('2d');
       if(chartRef){ chartRef.destroy(); chartRef = null; }
       let dataset;
@@ -1238,10 +1388,19 @@
         data: { labels, datasets: dataset },
         options: {
           responsive: true, maintainAspectRatio: false,
-          scales: type==='scatter' ? { x: { type: 'linear' }, y: { type: 'linear' } } : { x: { type: 'category' }, y: { type: 'linear' } },
+          scales: type==='scatter'
+            ? {
+                x: { type: 'linear', title: { display: !!xLabel, text: xLabel } },
+                y: { type: 'linear', title: { display: !!yLabel, text: yLabel } }
+              }
+            : {
+                x: { type: 'category', title: { display: !!xLabel, text: xLabel } },
+                y: { type: 'linear', title: { display: !!yLabel, text: yLabel } }
+              },
           interaction: { mode: 'nearest', intersect: false },
           plugins: {
-            legend: { display: true, position: 'top' },
+            legend: { display: true, position: 'bottom' },
+            title: { display: !!title, text: title },
             tooltip: {
               callbacks: {
                 label: (ctx) => {
@@ -1258,9 +1417,10 @@
           }
         }
       });
+      setChartCopyEnabled(true);
     }
 
-    function renderTimeLineMulti({ points1, label1, points2=null, label2=null }){
+    function renderTimeLineMulti({ points1, label1, points2=null, label2=null, title='', xLabel='', yLabel='', y1Label='' }){
       const ctx = document.getElementById('chartCanvas').getContext('2d');
       if(chartRef){ chartRef.destroy(); chartRef = null; }
       const p1 = (points1||[]).filter(p => Number.isFinite(p.x) && p.y != null);
@@ -1289,11 +1449,11 @@
       }
 
       const scales = {
-        x: { type: 'time', time: { unit: chooseTimeUnit(all) } },
-        y: { type: 'linear', position: 'left' }
+        x: { type: 'time', time: { unit: chooseTimeUnit(all) }, title: { display: !!xLabel, text: xLabel } },
+        y: { type: 'linear', position: 'left', title: { display: !!yLabel, text: yLabel } }
       };
       if(hasSecondary){
-        scales.y1 = { type: 'linear', position: 'right', grid: { drawOnChartArea: false } };
+        scales.y1 = { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, title: { display: !!y1Label, text: y1Label } };
       }
 
       chartRef = new Chart(ctx, {
@@ -1304,7 +1464,8 @@
           interaction: { mode: 'nearest', intersect: false },
           scales,
           plugins: {
-            legend: { display: true, position: 'top' },
+            legend: { display: true, position: 'bottom' },
+            title: { display: !!title, text: title },
             tooltip: {
               callbacks: {
                 title: (items)=> { const x = items[0]?.parsed?.x; return Number.isFinite(x) ? new Date(x).toLocaleString() : ''; },
@@ -1314,9 +1475,10 @@
           }
         }
       });
+      setChartCopyEnabled(true);
     }
 
-    function renderTimeBar({ points, label }){
+    function renderTimeBar({ points, label, title='', xLabel='', yLabel='' }){
       const ctx = document.getElementById('chartCanvas').getContext('2d');
       if(chartRef){ chartRef.destroy(); chartRef = null; }
       const pts = (points||[]).filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b)=>a.x - b.x);
@@ -1326,9 +1488,13 @@
         options: {
           parsing: false, responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'nearest', intersect: false },
-          scales: { x: { type: 'time', time: { unit: chooseTimeUnit(pts) } }, y: { type: 'linear' } },
+          scales: {
+            x: { type: 'time', time: { unit: chooseTimeUnit(pts) }, title: { display: !!xLabel, text: xLabel } },
+            y: { type: 'linear', title: { display: !!yLabel, text: yLabel } }
+          },
           plugins: {
-            legend: { display: true, position: 'top' },
+            legend: { display: true, position: 'bottom' },
+            title: { display: !!title, text: title },
             tooltip: {
               callbacks: {
                 title: (items)=> { const x = items[0]?.parsed?.x; return Number.isFinite(x) ? new Date(x).toLocaleString() : ''; },
@@ -1338,6 +1504,7 @@
           }
         }
       });
+      setChartCopyEnabled(true);
     }
 
     function renderStatsBox(values, field){
@@ -1372,7 +1539,8 @@
     function downloadAggregateCSV(){ if(!aggTableRef){ showError('No result table to download.'); return; } aggTableRef.download('csv', (logFileName || 'decoded') + '_analysis.csv'); }
 
     function generateAnalysis(){
-      if(!analyticsCache) return;
+      if(!analyticsCache){ setChartCopyEnabled(false); return; }
+      setChartCopyEnabled(false);
       const { rows } = analyticsCache;
 
       const fieldX = document.getElementById('fieldSelect').value;
@@ -1384,6 +1552,12 @@
       const filters = getFilters();
 
       let fr0 = filterRows(rows, filters);
+      const fieldXLabel = formatFieldLabel(fieldX);
+      const field2Label = field2 ? formatFieldLabel(field2) : '';
+      const fieldYLabel = fieldY ? formatFieldLabel(fieldY) : '';
+      const bucketSuffix = bucket !== 'none' ? `per ${bucket}` : '';
+      const aggLabelX = bucket !== 'none' ? formatAggregateLabel(fieldX, agg, bucketSuffix) : fieldXLabel;
+      const aggLabel2 = (bucket !== 'none' && field2) ? formatAggregateLabel(field2, agg, bucketSuffix) : field2Label;
 
       const valuesXAll = fr0.map(r => numericValue(r, fieldX)).filter(v=>v!=null);
       const valuesYAll = (chartType==='scatter' && fieldY) ? fr0.map(r => numericValue(r, fieldY)).filter(v=>v!=null) : [];
@@ -1431,7 +1605,16 @@
           {title:formatFieldLabel(fieldX), field:'x'},
           {title:formatFieldLabel(fieldY), field:'y'}
         ]);
-        renderChart({ type: 'scatter', labels: [], data, label: `${formatFieldLabel(fieldY)} vs ${formatFieldLabel(fieldX)}` });
+        const scatterTitle = `${fieldYLabel} vs ${fieldXLabel}`;
+        renderChart({
+          type: 'scatter',
+          labels: [],
+          data,
+          label: scatterTitle,
+          title: scatterTitle,
+          xLabel: fieldXLabel,
+          yLabel: fieldYLabel
+        });
         renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
         return;
       }
@@ -1447,8 +1630,27 @@
           const labels = counts.map((_,i)=>{ const a = min + i*width, b = a + width; const prec = Object.prototype.hasOwnProperty.call(FIELD_PRECISION,fieldX)?FIELD_PRECISION[fieldX]:null; return `${fmtNumber(a, prec)}–${fmtNumber(b, prec)}`; });
           const tableData = labels.map((bin,i)=>({ bin, count: counts[i] }));
           renderAggTable(tableData, [ {title:'Bin', field:'bin'}, {title:'Count', field:'count'} ]);
-          renderChart({ type: 'bar', labels, data: counts, label: `Histogram ${formatFieldLabel(fieldX)}` });
-        } else { renderAggTable([], []); renderChart({ type: 'bar', labels:[], data:[], label: `Histogram ${formatFieldLabel(fieldX)}` }); }
+          renderChart({
+            type: 'bar',
+            labels,
+            data: counts,
+            label: `Histogram ${fieldXLabel}`,
+            title: `Distribution of ${fieldXLabel}`,
+            xLabel: fieldXLabel,
+            yLabel: 'Count'
+          });
+        } else {
+          renderAggTable([], []);
+          renderChart({
+            type: 'bar',
+            labels:[],
+            data:[],
+            label: `Histogram ${fieldXLabel}`,
+            title: `Distribution of ${fieldXLabel}`,
+            xLabel: fieldXLabel,
+            yLabel: 'Count'
+          });
+        }
         renderStatsBox(values, fieldX);
         return;
       }
@@ -1470,7 +1672,17 @@
           const rows = keys.map(x => ({ ts: new Date(x).toLocaleString(), [fieldX]: m1.get(x) ?? '', ...(field2 ? { [field2]: m2.get(x) ?? '' } : {}) }));
           cols.push({ title: formatFieldLabel(fieldX), field: fieldX }); if(field2){ cols.push({ title: formatFieldLabel(field2), field: field2 }); }
           renderAggTable(rows, cols);
-          renderTimeLineMulti({ points1: p1, label1: formatFieldLabel(fieldX), points2: field2 ? p2 : null, label2: field2 ? formatFieldLabel(field2) : null });
+          const title = field2Label ? `${fieldXLabel} & ${field2Label} over time` : `${fieldXLabel} over time`;
+          renderTimeLineMulti({
+            points1: p1,
+            label1: fieldXLabel,
+            points2: field2 ? p2 : null,
+            label2: field2 ? field2Label : null,
+            title,
+            xLabel: 'Time',
+            yLabel: fieldXLabel,
+            y1Label: field2 ? field2Label : ''
+          });
           renderStatsBox(p1.map(p=>p.y), fieldX);
           return;
         } else {
@@ -1490,13 +1702,20 @@
 
           const tableLabels = keys.map(k => { const d = new Date(k); return bucket==='day' ? d.toLocaleDateString() : d.toLocaleString(); });
           const rowsTbl = keys.map((k,i) => ({ bucket_start: tableLabels[i], [fieldX]: p1[i].y, ...(field2 ? { [field2]: p2[i].y } : {}) }));
-          const colsTbl = [{ title:'Bucket start (local)', field:'bucket_start' }, { title:formatAggregateLabel(fieldX, agg), field: fieldX }];
-          if(field2) colsTbl.push({ title:formatAggregateLabel(field2, agg), field: field2 });
+          const colsTbl = [{ title:'Bucket start (local)', field:'bucket_start' }, { title:aggLabelX, field: fieldX }];
+          if(field2) colsTbl.push({ title:aggLabel2, field: field2 });
           renderAggTable(rowsTbl, colsTbl);
 
+          const title = field2 ? `${aggLabelX} vs ${aggLabel2}` : aggLabelX;
           renderTimeLineMulti({
-            points1: p1, label1: formatAggregateLabel(fieldX, agg, `per ${bucket}`),
-            points2: field2 ? p2 : null, label2: field2 ? formatAggregateLabel(field2, agg, `per ${bucket}`) : null
+            points1: p1,
+            label1: aggLabelX,
+            points2: field2 ? p2 : null,
+            label2: field2 ? aggLabel2 : null,
+            title,
+            xLabel: 'Time',
+            yLabel: aggLabelX,
+            y1Label: field2 ? aggLabel2 : ''
           });
           renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
           return;
@@ -1509,7 +1728,13 @@
                            .filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b) => a.x - b.x);
           const tableData = points.map(p => ({ timestamp: new Date(p.x).toLocaleString(), value: p.y }));
           renderAggTable(tableData, [ {title:'Timestamp (local)', field:'timestamp'}, {title:formatFieldLabel(fieldX), field:'value'} ]);
-          renderTimeBar({ points, label: formatFieldLabel(fieldX) });
+          renderTimeBar({
+            points,
+            label: fieldXLabel,
+            title: `${fieldXLabel} over time`,
+            xLabel: 'Time',
+            yLabel: fieldXLabel
+          });
           renderStatsBox(points.map(p=>p.y), fieldX);
           return;
         } else {
@@ -1529,9 +1754,15 @@
           const tableData = keys.map((k,i) => ({ bucket_start: tableLabels[i], value: arr[i] }));
           renderAggTable(tableData, [
             {title:'Bucket start (local)', field:'bucket_start'},
-            {title:formatAggregateLabel(fieldX, agg), field:'value'}
+            {title:aggLabelX, field:'value'}
           ]);
-          renderTimeBar({ points, label: formatAggregateLabel(fieldX, agg, `per ${bucket}`) });
+          renderTimeBar({
+            points,
+            label: aggLabelX,
+            title: aggLabelX,
+            xLabel: 'Time',
+            yLabel: aggLabelX
+          });
           renderStatsBox(fr.map(r => numericValue(r, fieldX)).filter(v=>v!=null), fieldX);
           return;
         }
@@ -1582,9 +1813,12 @@
     function generateMap(){
       const msgEl = document.getElementById('mapMessage');
       const mapEl = document.getElementById('map');
+      const mapWrapper = document.getElementById('mapWrapper');
 
       // Hide map before evaluation
       if(mapEl) mapEl.style.display = 'none';
+      if(mapWrapper) mapWrapper.style.display = 'none';
+      setMapCopyEnabled(false);
       if(msgEl) msgEl.textContent = '';
 
       if(!analyticsCache){
@@ -1628,6 +1862,8 @@
 
       // Show map now that we have data
       if(mapEl) mapEl.style.display = 'block';
+      if(mapWrapper) mapWrapper.style.display = 'block';
+      setMapCopyEnabled(true);
 
       // Table
       renderMapTable(points.map(p => ({ timestamp: p.tsLabel, latitude: p.lat, longitude: p.lon })));
@@ -1636,7 +1872,9 @@
       if(!mapRef){
         mapRef = L.map('map', { preferCanvas: true });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          crossOrigin: 'anonymous'
         }).addTo(mapRef);
         mapCanvasRenderer = L.canvas({ padding: 0.2 });
         mapPointsLayer = L.layerGroup().addTo(mapRef);
