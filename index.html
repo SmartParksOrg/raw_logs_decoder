@@ -464,6 +464,34 @@
       </div>
     </details>
 
+    <!-- === BLE SCAN (PORT 29 -> 11) SECTION === -->
+    <details class="card" open>
+      <summary><span class="chev">▸</span> BLE Scan Results</summary>
+      <div class="section-body">
+        <div id="bleScanPanel" style="display:none;">
+          <div class="controls-grid">
+            <div class="control">
+              <label for="bleStartTime">From (BLE)</label>
+              <input id="bleStartTime" type="datetime-local" />
+            </div>
+            <div class="control">
+              <label for="bleEndTime">To (BLE)</label>
+              <input id="bleEndTime" type="datetime-local" />
+            </div>
+            <div class="control">
+              <label class="muted">&nbsp;</label>
+              <button id="genBleBtn" class="btn">Generate</button>
+            </div>
+          </div>
+          <div id="bleScanSummary"></div>
+          <div id="bleScanChartWrapper" class="visual-wrapper" style="margin-top:12px;">
+            <canvas id="bleScanChartCanvas" height="320"></canvas>
+          </div>
+          <div id="bleScanTable" style="margin-top:12px;"></div>
+        </div>
+      </div>
+    </details>
+
     <!-- === LOG MESSAGES SECTION === -->
     <details class="card" open>
       <summary><span class="chev">▸</span> Log messages</summary>
@@ -798,6 +826,7 @@
         isDecoding = false;
         renderMessageSummary(decodedOutput);
         renderBundledSummary(decodedOutput);
+        renderBleScanPanel(decodedOutput);
         prepareAnalytics();
         return;
       }
@@ -843,6 +872,7 @@
       document.getElementById("output").innerHTML = "";
       document.getElementById("analyticsPanel").style.display = "none";
       document.getElementById("mapPanel").style.display = "none"; // also hide Map until data ready
+      document.getElementById("bleScanPanel").style.display = "none";
       const tip = document.getElementById("logTip"); if (tip) tip.style.display = "none"; // hide tip until we have data
 
       const reader = new FileReader();
@@ -1171,7 +1201,11 @@
     });
 
     decodeBtn.addEventListener("click", processFile);
-    window.addEventListener("DOMContentLoaded", () => { loadDecoder(); });
+    window.addEventListener("DOMContentLoaded", () => {
+      loadDecoder();
+      const genBleBtn = document.getElementById('genBleBtn');
+      if(genBleBtn){ genBleBtn.onclick = () => renderBleScanPanel(decodedOutput); }
+    });
 
     // =========================
     //    ANALYTICS MODULE
@@ -1186,6 +1220,8 @@
     let mapTrackLayer = null;
     let mapCanvasRenderer = null;
     let mapTableRef = null;
+    let bleScanTableRef = null;
+    let bleScanChartRef = null;
 
     // Outlier auto-range flags
     let needRecalcX = true, needRecalcY = true;
@@ -1988,6 +2024,187 @@
           </table>`;
         el.innerHTML += html; el.style.display = 'block';
       }catch(err){ console.error('renderBundledSummary failed', err); }
+    }
+
+    function normalizeMacTail(mac){
+      if(typeof mac !== 'string' || !mac.trim()) return '';
+      const parts = mac.split(':').map(p => p.trim()).filter(Boolean);
+      if(parts.length < 3) return '';
+      return parts.slice(-3).map(p => p.padStart(2, '0').toUpperCase()).join(':');
+    }
+
+    function extractBleDetections(decoded, fallbackTsSec){
+      if(!decoded || typeof decoded !== 'object') return [];
+      let tsSec = null;
+      if(Number.isFinite(decoded.t)) tsSec = decoded.t;
+      else if(Number.isFinite(fallbackTsSec)) tsSec = fallbackTsSec;
+      const tsIso = Number.isFinite(tsSec) ? new Date(tsSec * 1000).toISOString() : '';
+
+      const rows = [];
+      Object.keys(decoded)
+        .filter(k => /^\d+$/.test(k))
+        .sort((a,b) => Number(a) - Number(b))
+        .forEach((k) => {
+          const item = decoded[k];
+          if(!item || typeof item !== 'object') return;
+          const rssi = Number(item.rssi);
+          const device = normalizeMacTail(item.mac || '');
+          if(!Number.isFinite(rssi) || !device) return;
+          rows.push({
+            timestamp_utc: tsIso,
+            timestamp_local: tsIso ? new Date(tsIso).toLocaleString() : '',
+            device,
+            rssi
+          });
+        });
+      return rows;
+    }
+
+    function collectBleScanRowsFromPort29(all){
+      const rows = [];
+      (all || []).forEach((entry) => {
+        if(!entry || entry.port !== 29 || !entry.decodedData || typeof entry.decodedData !== 'object') return;
+        Object.values(entry.decodedData).forEach((sub) => {
+          if(!sub || typeof sub !== 'object' || sub.port !== 11) return;
+          rows.push(...extractBleDetections(sub.data, sub.timestamp));
+        });
+      });
+
+      return rows.sort((a,b) => {
+        const ta = a.timestamp_utc ? Date.parse(a.timestamp_utc) : -Infinity;
+        const tb = b.timestamp_utc ? Date.parse(b.timestamp_utc) : -Infinity;
+        if(ta !== tb) return ta - tb;
+        return a.device.localeCompare(b.device);
+      });
+    }
+
+    function getBleFilters(){
+      const start = parseLocalDateTimeInput(document.getElementById('bleStartTime'));
+      const end = parseLocalDateTimeInput(document.getElementById('bleEndTime'));
+      return { start, end };
+    }
+
+    function filterBleRows(rows, filters){
+      return (rows || []).filter((r) => {
+        const t = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
+        if(filters.start && (!t || t < filters.start)) return false;
+        if(filters.end && (!t || t > filters.end)) return false;
+        return true;
+      });
+    }
+
+    function renderBleScanChart(rows){
+      const canvas = document.getElementById('bleScanChartCanvas');
+      if(!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if(bleScanChartRef){ bleScanChartRef.destroy(); bleScanChartRef = null; }
+
+      const byDevice = new Map();
+      rows.forEach((r) => {
+        const t = r.timestamp_utc ? Date.parse(r.timestamp_utc) : NaN;
+        if(!Number.isFinite(t)) return;
+        if(!byDevice.has(r.device)) byDevice.set(r.device, []);
+        byDevice.get(r.device).push({ x: t, y: r.rssi });
+      });
+
+      const devices = Array.from(byDevice.keys()).sort();
+      const datasets = devices.map((device, idx) => {
+        const points = byDevice.get(device).sort((a,b) => a.x - b.x);
+        const hue = Math.round((idx * 360) / Math.max(1, devices.length));
+        const color = `hsl(${hue} 72% 45%)`;
+        return {
+          label: device,
+          data: points,
+          parsing: false,
+          borderColor: color,
+          backgroundColor: color,
+          pointRadius: 2,
+          borderWidth: 2,
+          tension: 0.15
+        };
+      });
+
+      bleScanChartRef = new Chart(ctx, {
+        type: 'line',
+        data: { datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          scales: {
+            x: { type: 'time', title: { display: true, text: 'Time' } },
+            y: { type: 'linear', title: { display: true, text: 'RSSI (dBm)' } }
+          },
+          plugins: {
+            legend: { display: true, position: 'bottom' },
+            title: { display: true, text: 'BLE RSSI over time per device' },
+            tooltip: {
+              callbacks: {
+                title: (items) => {
+                  const x = items[0]?.parsed?.x;
+                  return Number.isFinite(x) ? new Date(x).toLocaleString() : '';
+                },
+                label: (item) => `${item.dataset.label}: ${fmtNumber(item.parsed.y)} dBm`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderBleScanPanel(all){
+      try{
+        const panel = document.getElementById('bleScanPanel');
+        const summary = document.getElementById('bleScanSummary');
+        const tableHolder = document.getElementById('bleScanTable');
+        if(!panel || !summary || !tableHolder) return;
+
+        if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
+        tableHolder.innerHTML = '';
+
+        const allRows = collectBleScanRowsFromPort29(all);
+        const rows = filterBleRows(allRows, getBleFilters());
+        if(!rows.length){
+          if(bleScanChartRef){ bleScanChartRef.destroy(); bleScanChartRef = null; }
+          summary.innerHTML = '<em>No BLE scan detections found for the selected time range.</em>';
+          panel.style.display = 'block';
+          return;
+        }
+
+        const unique = new Set(rows.map(r => r.device));
+        const maxRssi = Math.max(...rows.map(r => r.rssi));
+        const minRssi = Math.min(...rows.map(r => r.rssi));
+        summary.innerHTML = `
+          <h3 style="margin:0 0 6px;">BLE detection summary</h3>
+          <table>
+            <tr><td>Total detections</td><td>${rows.length}</td></tr>
+            <tr><td>Unique devices</td><td>${unique.size}</td></tr>
+            <tr><td>Strongest RSSI</td><td>${maxRssi} dBm</td></tr>
+            <tr><td>Weakest RSSI</td><td>${minRssi} dBm</td></tr>
+          </table>`;
+
+        renderBleScanChart(rows);
+
+        bleScanTableRef = new Tabulator('#bleScanTable', {
+          data: rows,
+          layout: 'fitColumns',
+          height: '320px',
+          columns: [
+            { title: 'Timestamp (UTC)', field: 'timestamp_utc', visible: false },
+            { title: 'Timestamp (local)', field: 'timestamp_local' },
+            { title: 'MAC tail (last 3 bytes)', field: 'device' },
+            { title: 'RSSI (dBm)', field: 'rssi', sorter: 'number' }
+          ],
+          initialSort: [
+            { column: 'timestamp_utc', dir: 'asc' },
+            { column: 'device', dir: 'asc' }
+          ]
+        });
+
+        panel.style.display = 'block';
+      }catch(err){
+        console.error('renderBleScanPanel failed', err);
+      }
     }
   </script>
 </body>
