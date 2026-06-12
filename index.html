@@ -59,7 +59,6 @@
     #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
     #mapTimeSliderWrapper{ margin-top:12px; }
-    #mapTimeSlider{ width:100%; accent-color:var(--brand); }
     #mapTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
@@ -461,8 +460,12 @@
           </div>
 
           <div id="mapTimeSliderWrapper" style="display:none;">
-            <label for="mapTimeSlider">Map time</label>
-            <input id="mapTimeSlider" type="range" min="0" max="0" step="1" value="0" />
+            <label>Map time range</label>
+            <div class="dual-range" id="mapTimeRangeSlider">
+              <div class="dual-range-track"></div>
+              <input id="mapTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map start time" />
+              <input id="mapTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map end time" />
+            </div>
             <div id="mapTimeSliderLabels" class="dim">
               <span id="mapTimeStartLabel"></span>
               <strong id="mapTimeCurrentLabel"></strong>
@@ -1236,10 +1239,14 @@
       if(genMapBtn){ genMapBtn.onclick = generateMap; }
       const dlMapBtn = document.getElementById('downloadMapBtn');
       if(dlMapBtn){ dlMapBtn.onclick = downloadMapCSV; }
-      const mapTimeSlider = document.getElementById('mapTimeSlider');
-      if(mapTimeSlider){
-        mapTimeSlider.oninput = () => renderMapView(Number(mapTimeSlider.value), false);
-      }
+      ['mapTimeStartSlider','mapTimeEndSlider'].forEach(id => {
+        const slider = document.getElementById(id);
+        if(!slider) return;
+        slider.oninput = () => {
+          constrainMapTimeRange(id === 'mapTimeStartSlider' ? 'start' : 'end');
+          renderMapView(false);
+        };
+      });
 
       // Recalculate ranges when fields or row-level filters change.
       if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
@@ -2036,21 +2043,48 @@
         </table>`;
     }
 
-    function renderMapView(sliderIndex, fitBounds){
+    function constrainMapTimeRange(changedHandle){
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+      if(Number(startSlider.value) > Number(endSlider.value)){
+        if(changedHandle === 'start') endSlider.value = startSlider.value;
+        else startSlider.value = endSlider.value;
+      }
+    }
+
+    function updateMapTimeRangeVisual(){
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
+      const rangeSlider = document.getElementById('mapTimeRangeSlider');
+      if(!startSlider || !endSlider || !rangeSlider) return;
+      const max = Number(endSlider.max);
+      const startPercent = max > 0 ? (Number(startSlider.value) / max) * 100 : 0;
+      const endPercent = max > 0 ? (Number(endSlider.value) / max) * 100 : 100;
+      rangeSlider.style.setProperty('--range-start', `${startPercent}%`);
+      rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
+    }
+
+    function renderMapView(fitBounds){
       if(!mapViewState) return;
       const { points, totalLocationMessages, zeroCoordinateCount, track } = mapViewState;
       const maxIndex = Math.max(0, points.length - 1);
-      const index = Math.max(0, Math.min(maxIndex, Number.isFinite(sliderIndex) ? sliderIndex : maxIndex));
-      const visiblePoints = points.slice(0, index + 1);
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
+      const startIndex = Math.max(0, Math.min(maxIndex, startSlider ? Number(startSlider.value) : 0));
+      const endIndex = Math.max(startIndex, Math.min(maxIndex, endSlider ? Number(endSlider.value) : maxIndex));
+      const visiblePoints = points.slice(startIndex, endIndex + 1);
       const latestPoint = visiblePoints.length ? visiblePoints[visiblePoints.length - 1] : null;
 
-      const slider = document.getElementById('mapTimeSlider');
+      const startLabel = document.getElementById('mapTimeStartLabel');
+      const endLabel = document.getElementById('mapTimeEndLabel');
       const currentLabel = document.getElementById('mapTimeCurrentLabel');
-      if(slider) slider.value = String(index);
+      if(startLabel) startLabel.textContent = visiblePoints[0]?.tsLabel || 'Unknown time';
+      if(endLabel) endLabel.textContent = latestPoint?.tsLabel || 'Unknown time';
       if(currentLabel){
-        const timestampLabel = latestPoint && latestPoint.tsLabel ? latestPoint.tsLabel : 'Unknown time';
-        currentLabel.textContent = `${timestampLabel} (${visiblePoints.length}/${points.length} points)`;
+        currentLabel.textContent = `${visiblePoints.length}/${points.length} points`;
       }
+      updateMapTimeRangeVisual();
 
       renderMapTable(visiblePoints.map(p => ({
         timestamp: p.tsLabel,
@@ -2184,19 +2218,17 @@
       if(mapWrapper) mapWrapper.style.display = 'block';
       mapViewState = { points, totalLocationMessages, zeroCoordinateCount, track };
 
-      const slider = document.getElementById('mapTimeSlider');
-      const startLabel = document.getElementById('mapTimeStartLabel');
-      const endLabel = document.getElementById('mapTimeEndLabel');
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
       if(sliderWrapper) sliderWrapper.style.display = 'block';
-      if(slider){
-        slider.min = '0';
-        slider.max = String(points.length - 1);
-        slider.value = slider.max;
-        slider.disabled = points.length <= 1;
+      if(startSlider && endSlider){
+        startSlider.min = endSlider.min = '0';
+        startSlider.max = endSlider.max = String(points.length - 1);
+        startSlider.value = '0';
+        endSlider.value = endSlider.max;
+        startSlider.disabled = endSlider.disabled = points.length <= 1;
       }
-      if(startLabel) startLabel.textContent = points[0].tsLabel || 'Unknown time';
-      if(endLabel) endLabel.textContent = points[points.length - 1].tsLabel || 'Unknown time';
-      renderMapView(points.length - 1, true);
+      renderMapView(true);
 
     }
 
