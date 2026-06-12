@@ -371,11 +371,11 @@
             </div>
             <div>
               <label for="startTime">From</label>
-              <input id="startTime" type="datetime-local" />
+              <input id="startTime" type="datetime-local" step="1" />
             </div>
             <div>
               <label for="endTime">To</label>
-              <input id="endTime" type="datetime-local" />
+              <input id="endTime" type="datetime-local" step="1" />
             </div>
             <div>
               <label class="muted">&nbsp;</label>
@@ -416,11 +416,11 @@
             </div>
             <div class="control">
               <label for="mapStartTime">From (Map)</label>
-              <input id="mapStartTime" type="datetime-local" />
+              <input id="mapStartTime" type="datetime-local" step="1" />
             </div>
             <div class="control">
               <label for="mapEndTime">To (Map)</label>
-              <input id="mapEndTime" type="datetime-local" />
+              <input id="mapEndTime" type="datetime-local" step="1" />
             </div>
 
             <div class="control" id="latFieldWrapper">
@@ -476,11 +476,11 @@
           <div class="controls-grid">
             <div class="control">
               <label for="bleStartTime">From (BLE)</label>
-              <input id="bleStartTime" type="datetime-local" />
+              <input id="bleStartTime" type="datetime-local" step="1" />
             </div>
             <div class="control">
               <label for="bleEndTime">To (BLE)</label>
-              <input id="bleEndTime" type="datetime-local" />
+              <input id="bleEndTime" type="datetime-local" step="1" />
             </div>
             <div class="control">
               <label class="muted">&nbsp;</label>
@@ -830,7 +830,7 @@
         isDecoding = false;
         renderMessageSummary(decodedOutput);
         renderBundledSummary(decodedOutput);
-        renderBleScanPanel(decodedOutput);
+        renderBleScanPanel(decodedOutput, true);
         prepareAnalytics();
         return;
       }
@@ -1209,6 +1209,10 @@
       loadDecoder();
       const genBleBtn = document.getElementById('genBleBtn');
       if(genBleBtn){ genBleBtn.onclick = () => renderBleScanPanel(decodedOutput); }
+      ['startTime','endTime','mapStartTime','mapEndTime','bleStartTime','bleEndTime'].forEach((id) => {
+        const input = document.getElementById(id);
+        if(input) input.addEventListener('input', () => { input.dataset.userEdited = 'true'; });
+      });
     });
 
     // =========================
@@ -1257,6 +1261,14 @@
       buildAnalyticsUI(numericFields);
       populateAnalyticsPortFilter(normalized);
       populateMapPortFilter(normalized);
+      setDateRangeFromRows(normalized, 'startTime', 'endTime', row => row.timestamp_utc, true);
+      setDateRangeFromRows(
+        normalized.filter(row => String(row.source_port) === '29' && MAP_LOCATION_PORTS.has(String(row.port))),
+        'mapStartTime',
+        'mapEndTime',
+        row => row.timestamp_utc,
+        true
+      );
 
       // Show panels only after data is ready
       document.getElementById('analyticsPanel').style.display = 'block';
@@ -1337,6 +1349,47 @@
       const d = new Date(el.value);
       if (isNaN(d.getTime())) return null;
       return d;
+    }
+
+    function formatDateTimeLocal(timestamp){
+      const d = new Date(timestamp);
+      if(!Number.isFinite(d.getTime())) return '';
+      const pad = value => String(value).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function dateRangeWasEdited(startId, endId){
+      const start = document.getElementById(startId);
+      const end = document.getElementById(endId);
+      return (start && start.dataset.userEdited === 'true') || (end && end.dataset.userEdited === 'true');
+    }
+
+    function setDateRangeFromRows(rows, startId, endId, getTimestamp, resetUserEdited=false){
+      const start = document.getElementById(startId);
+      const end = document.getElementById(endId);
+      if(!start || !end) return false;
+
+      let minTimestamp = Infinity;
+      let maxTimestamp = -Infinity;
+      (rows || []).forEach(row => {
+        const value = getTimestamp(row);
+        const timestamp = typeof value === 'number' ? value : Date.parse(value || '');
+        if(!Number.isFinite(timestamp)) return;
+        minTimestamp = Math.min(minTimestamp, timestamp);
+        maxTimestamp = Math.max(maxTimestamp, timestamp);
+      });
+      if(!Number.isFinite(minTimestamp)){
+        start.value = '';
+        end.value = '';
+      } else {
+        start.value = formatDateTimeLocal(minTimestamp);
+        end.value = formatDateTimeLocal(maxTimestamp);
+      }
+      if(resetUserEdited){
+        start.dataset.userEdited = 'false';
+        end.dataset.userEdited = 'false';
+      }
+      return Number.isFinite(minTimestamp);
     }
 
     function getFilters(){
@@ -1618,9 +1671,15 @@
       const bucket = document.getElementById('bucketSelect').value;
       const agg = document.getElementById('aggSelect').value;
       const chartType = document.getElementById('chartType').value;
+      const selectedPort = document.getElementById('portFilter').value;
+      const portRows = selectedPort ? rows.filter(row => String(row.port) === selectedPort) : rows;
+      if(!dateRangeWasEdited('startTime', 'endTime')){
+        setDateRangeFromRows(portRows, 'startTime', 'endTime', row => row.timestamp_utc);
+      }
       const filters = getFilters();
 
       let fr0 = filterRows(rows, filters);
+      setDateRangeFromRows(fr0, 'startTime', 'endTime', row => row.timestamp_utc);
       const fieldXLabel = formatFieldLabel(fieldX);
       const field2Label = field2 ? formatFieldLabel(field2) : '';
       const fieldYLabel = fieldY ? formatFieldLabel(fieldY) : '';
@@ -1935,6 +1994,15 @@
       }
       const { rows, numericFields } = analyticsCache;
 
+      const selectedPort = document.getElementById('mapPortFilter').value;
+      const availableMapRows = rows.filter(row =>
+        String(row.source_port) === '29' &&
+        MAP_LOCATION_PORTS.has(String(row.port)) &&
+        (!selectedPort || String(row.port) === selectedPort)
+      );
+      if(!dateRangeWasEdited('mapStartTime', 'mapEndTime')){
+        setDateRangeFromRows(availableMapRows, 'mapStartTime', 'mapEndTime', row => row.timestamp_utc);
+      }
       const filters = getMapFilters();
       const fr = filterRows(rows, filters).filter(row =>
         String(row.source_port) === '29' && MAP_LOCATION_PORTS.has(String(row.port))
@@ -1969,6 +2037,7 @@
           tsLabel: timestampMs == null ? '' : parsedTs.toLocaleString()
         });
       });
+      setDateRangeFromRows(points, 'mapStartTime', 'mapEndTime', point => point.timestampMs);
 
       if(!points.length){
         if(msgEl) msgEl.textContent = 'no valid location data found';
@@ -2238,7 +2307,7 @@
       });
     }
 
-    function renderBleScanPanel(all){
+    function renderBleScanPanel(all, resetDateRange=false){
       try{
         const panel = document.getElementById('bleScanPanel');
         const summary = document.getElementById('bleScanSummary');
@@ -2249,7 +2318,11 @@
         tableHolder.innerHTML = '';
 
         const allRows = collectBleScanRowsFromPort29(all);
+        if(resetDateRange || !dateRangeWasEdited('bleStartTime', 'bleEndTime')){
+          setDateRangeFromRows(allRows, 'bleStartTime', 'bleEndTime', row => row.timestamp_utc, resetDateRange);
+        }
         const rows = filterBleRows(allRows, getBleFilters());
+        setDateRangeFromRows(rows, 'bleStartTime', 'bleEndTime', row => row.timestamp_utc);
         if(!rows.length){
           if(bleScanChartRef){ bleScanChartRef.destroy(); bleScanChartRef = null; }
           summary.innerHTML = '<em>No BLE scan detections found for the selected time range.</em>';
