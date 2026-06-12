@@ -1829,7 +1829,17 @@
       mapTableRef = new Tabulator('#mapTable', {
         data: rows, layout: 'fitColumns', height: '300px',
         columns: [
-          { title: 'Timestamp (local)', field: 'timestamp' },
+          {
+            title: 'Timestamp (local)',
+            field: 'timestamp',
+            sorter: function(a, b, aRow, bRow){
+              const aTime = aRow.getData().timestampMs;
+              const bTime = bRow.getData().timestampMs;
+              if(aTime == null) return bTime == null ? 0 : -1;
+              if(bTime == null) return 1;
+              return aTime - bTime;
+            }
+          },
           { title: 'Latitude', field: 'latitude' },
           { title: 'Longitude', field: 'longitude' }
         ]
@@ -1885,8 +1895,15 @@
         if(lat==null || lon==null) return;
         if(lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
         if(ignoreZeros && (lat === 0 || lon === 0)) return;
-        const ts = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
-        points.push({ lat, lon, ts, tsLabel: ts ? ts.toLocaleString() : '' });
+        const parsedTs = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
+        const timestampMs = parsedTs && Number.isFinite(parsedTs.getTime()) ? parsedTs.getTime() : null;
+        points.push({
+          lat,
+          lon,
+          ts: timestampMs == null ? null : parsedTs,
+          timestampMs,
+          tsLabel: timestampMs == null ? '' : parsedTs.toLocaleString()
+        });
       });
 
       if(!points.length){
@@ -1902,7 +1919,12 @@
       setMapCopyEnabled(true);
 
       // Table
-      renderMapTable(points.map(p => ({ timestamp: p.tsLabel, latitude: p.lat, longitude: p.lon })));
+      renderMapTable(points.map(p => ({
+        timestamp: p.tsLabel,
+        timestampMs: p.timestampMs,
+        latitude: p.lat,
+        longitude: p.lon
+      })));
 
       // Init map lazily
       if(!mapRef){
