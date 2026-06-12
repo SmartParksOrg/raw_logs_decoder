@@ -365,7 +365,9 @@
             </div>
             <div>
               <label for="portFilter">Filter: Port</label>
-              <input id="portFilter" type="text" placeholder="e.g. 15" />
+              <select id="portFilter">
+                <option value="">All available ports</option>
+              </select>
             </div>
             <div>
               <label for="startTime">From</label>
@@ -1253,6 +1255,7 @@
 
       analyticsCache = { rows: normalized, schema, numericFields };
       buildAnalyticsUI(numericFields);
+      populateAnalyticsPortFilter(normalized);
       populateMapPortFilter(normalized);
 
       // Show panels only after data is ready
@@ -1342,6 +1345,33 @@
       const end = parseLocalDateTimeInput(document.getElementById('endTime'));
       return { port: p || null, start, end };
     }
+
+    function populateAnalyticsPortFilter(rows){
+      const select = document.getElementById('portFilter');
+      if(!select) return;
+
+      const previousValue = select.value;
+      const ports = new Map();
+      (rows || []).forEach(row => {
+        if(String(row.source_port) !== '29' || row.port === '' || row.port == null) return;
+        const port = String(row.port);
+        if(!ports.has(port)) ports.set(port, resolveMessageType(row.port, row.dataObj));
+      });
+
+      select.innerHTML = '<option value="">All available ports</option>';
+      Array.from(ports.entries())
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .forEach(([port, messageType]) => {
+          const option = document.createElement('option');
+          option.value = port;
+          option.textContent = `${port} - ${messageType}`;
+          select.appendChild(option);
+        });
+      select.disabled = ports.size === 0;
+      if(ports.size === 0) select.options[0].textContent = 'No message ports available';
+      select.value = ports.has(previousValue) ? previousValue : '';
+    }
+
     function getMapFilters(){
       const p = document.getElementById('mapPortFilter').value.trim();
       const start = parseLocalDateTimeInput(document.getElementById('mapStartTime'));
