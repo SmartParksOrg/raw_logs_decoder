@@ -408,7 +408,9 @@
           <div class="controls-grid">
             <div class="control">
               <label for="mapPortFilter">Filter: Port (Map)</label>
-              <input id="mapPortFilter" type="text" placeholder="e.g. 1 or 15" />
+              <select id="mapPortFilter">
+                <option value="">All available location ports</option>
+              </select>
             </div>
             <div class="control">
               <label for="mapStartTime">From (Map)</label>
@@ -1071,12 +1073,12 @@
 
             if(sub.port===15){
               const exploded=explodeCmdqItems(tsIsoSub, sub.data);
-              if(exploded.length){ rows.push(...exploded); return; }
-              rows.push({ timestamp_utc:tsIsoSub, timestamp_src: tsIsoSub ? tsSrc : "parent", port:15, dataObj:(sub.data&&typeof sub.data==="object")?sub.data:(sub.data??{}) });
+              if(exploded.length){ rows.push(...exploded.map(row => ({ ...row, source_port:29 }))); return; }
+              rows.push({ timestamp_utc:tsIsoSub, timestamp_src: tsIsoSub ? tsSrc : "parent", source_port:29, port:15, dataObj:(sub.data&&typeof sub.data==="object")?sub.data:(sub.data??{}) });
               return;
             }
 
-            rows.push({ timestamp_utc:tsIsoSub, timestamp_src: tsIsoSub ? tsSrc : "parent", port:sub.port, dataObj:(sub.data&&typeof sub.data==="object")?sub.data:(sub.data??{}) });
+            rows.push({ timestamp_utc:tsIsoSub, timestamp_src: tsIsoSub ? tsSrc : "parent", source_port:29, port:sub.port, dataObj:(sub.data&&typeof sub.data==="object")?sub.data:(sub.data??{}) });
           });
           return;
         }
@@ -1084,8 +1086,8 @@
         if(entry.port===15){
           const tsIsoParent = entry.timestamp!=null ? new Date(entry.timestamp*1000).toISOString() : "";
           const exploded=explodeCmdqItems(tsIsoParent, entry.decodedData);
-          if(exploded.length){ rows.push(...exploded); return; }
-          rows.push({ timestamp_utc:tsIsoParent, timestamp_src: tsIsoParent ? "timestamp" : "parent", port:15, dataObj:(entry.decodedData&&typeof entry.decodedData==="object")?entry.decodedData:{} });
+          if(exploded.length){ rows.push(...exploded.map(row => ({ ...row, source_port:15 }))); return; }
+          rows.push({ timestamp_utc:tsIsoParent, timestamp_src: tsIsoParent ? "timestamp" : "parent", source_port:15, port:15, dataObj:(entry.decodedData&&typeof entry.decodedData==="object")?entry.decodedData:{} });
           return;
         }
 
@@ -1100,7 +1102,7 @@
         const d = entry.decodedData!=null ? entry.decodedData : (entry.error!=null ? { msg: entry.error } : {});
         const dataObj = (d && typeof d==="object" && d.data!=null) ? d.data : d;
 
-        rows.push({ timestamp_utc:tsIso, timestamp_src: tsIso ? tsSrc : "parent", port: entry.port!=null ? entry.port : "", dataObj: dataObj || {} });
+        rows.push({ timestamp_utc:tsIso, timestamp_src: tsIso ? tsSrc : "parent", source_port:entry.port!=null ? entry.port : "", port: entry.port!=null ? entry.port : "", dataObj: dataObj || {} });
       });
       return rows;
     }
@@ -1251,6 +1253,7 @@
 
       analyticsCache = { rows: normalized, schema, numericFields };
       buildAnalyticsUI(numericFields);
+      populateMapPortFilter(normalized);
 
       // Show panels only after data is ready
       document.getElementById('analyticsPanel').style.display = 'block';
@@ -1808,17 +1811,46 @@
     // =========================
     //          MAP
     // =========================
+    const MAP_LOCATION_PORTS = new Set(['2', '13', '16']);
+
+    function findMapCoordinateField(fields, aliases, suffixPattern){
+      for(const alias of aliases){
+        const exact = fields.find(field => field.toLowerCase() === alias);
+        if(exact) return exact;
+      }
+      return fields.find(field => suffixPattern.test(field)) || '';
+    }
+    function populateMapPortFilter(rows){
+      const select = document.getElementById('mapPortFilter');
+      if(!select) return;
+
+      const previousValue = select.value;
+      const ports = new Map();
+      (rows || []).forEach(row => {
+        const port = String(row.port);
+        if(String(row.source_port) !== '29' || !MAP_LOCATION_PORTS.has(port) || ports.has(port)) return;
+        ports.set(port, resolveMessageType(row.port, row.dataObj));
+      });
+
+      select.innerHTML = '<option value="">All available location ports</option>';
+      Array.from(ports.entries())
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .forEach(([port, messageType]) => {
+          const option = document.createElement('option');
+          option.value = port;
+          option.textContent = `${port} - ${messageType}`;
+          select.appendChild(option);
+        });
+      select.disabled = ports.size === 0;
+      if(ports.size === 0) select.options[0].textContent = 'No location ports available';
+      select.value = ports.has(previousValue) ? previousValue : '';
+    }
+
     function pickBestLat(fields){
-      const candidates = ['latitude','lat','gps_lat','lat_deg'];
-      for(const c of candidates){ const f = fields.find(x => x.toLowerCase() === c); if(f) return f; }
-      const partial = fields.find(x => /lat/i.test(x));
-      return partial || '';
+      return findMapCoordinateField(fields, ['latitude','lat','gps_lat','lat_deg'], /(^|_)lat(itude)?(_deg)?$/i);
     }
     function pickBestLon(fields){
-      const candidates = ['longitude','lon','lng','gps_lon','long','lon_deg'];
-      for(const c of candidates){ const f = fields.find(x => x.toLowerCase() === c); if(f) return f; }
-      const partial = fields.find(x => /(lon|lng|long)/i.test(x));
-      return partial || '';
+      return findMapCoordinateField(fields, ['longitude','lon','lng','gps_lon','long','lon_deg'], /(^|_)(lon|lng|long|longitude)(_deg)?$/i);
     }
 
     function renderMapTable(rows){
@@ -1874,7 +1906,9 @@
       const { rows, numericFields } = analyticsCache;
 
       const filters = getMapFilters();
-      const fr = filterRows(rows, filters);
+      const fr = filterRows(rows, filters).filter(row =>
+        String(row.source_port) === '29' && MAP_LOCATION_PORTS.has(String(row.port))
+      );
 
       const latSel = document.getElementById('latField');
       const lonSel = document.getElementById('lonField');
