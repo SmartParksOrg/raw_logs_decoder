@@ -1962,7 +1962,8 @@
             }
           },
           { title: 'Latitude', field: 'latitude' },
-          { title: 'Longitude', field: 'longitude' }
+          { title: 'Longitude', field: 'longitude' },
+          { title: 'Horizontal accuracy estimate (m)', field: 'h_acc_est', sorter: 'number' }
         ]
       });
     }
@@ -2027,11 +2028,13 @@
         if(lat==null || lon==null) return;
         if(lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
         if(ignoreZeros && (lat === 0 || lon === 0)) return;
+        const horizontalAccuracy = numericValue(r, 'h_acc_est');
         const parsedTs = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
         const timestampMs = parsedTs && Number.isFinite(parsedTs.getTime()) ? parsedTs.getTime() : null;
         points.push({
           lat,
           lon,
+          horizontalAccuracy,
           ts: timestampMs == null ? null : parsedTs,
           timestampMs,
           tsLabel: timestampMs == null ? '' : parsedTs.toLocaleString()
@@ -2056,7 +2059,8 @@
         timestamp: p.tsLabel,
         timestampMs: p.timestampMs,
         latitude: p.lat,
-        longitude: p.lon
+        longitude: p.lon,
+        h_acc_est: p.horizontalAccuracy
       })));
 
       // Init map lazily
@@ -2075,9 +2079,12 @@
 
       // Dots
       points.forEach(p => {
+        const accuracyLabel = p.horizontalAccuracy == null
+          ? ''
+          : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
         const dot = L.circleMarker([p.lat, p.lon], {
           radius: 3, fillColor: '#3388ff', fillOpacity: 0.35, stroke: false, renderer: mapCanvasRenderer
-        }).bindPopup(`${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`);
+        }).bindPopup(`${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
         mapPointsLayer.addLayer(dot);
       });
 
@@ -2097,12 +2104,17 @@
       const statsBox = document.getElementById('mapStatsBox');
       if(points.length){
         const lats = points.map(p=>p.lat), lons = points.map(p=>p.lon);
+        const horizontalAccuracies = points.map(p=>p.horizontalAccuracy).filter(v=>v!=null);
+        const horizontalAccuracyRow = horizontalAccuracies.length
+          ? `<tr><td>Horizontal accuracy estimate range</td><td>${fmtNumber(Math.min(...horizontalAccuracies))} – ${fmtNumber(Math.max(...horizontalAccuracies))} m</td></tr>`
+          : '';
         statsBox.innerHTML = `
           <h3>Map summary</h3>
           <table>
             <tr><td>Points</td><td>${points.length}</td></tr>
             <tr><td>Latitude range</td><td>${fmtNumber(Math.min(...lats),6)} – ${fmtNumber(Math.max(...lats),6)}</td></tr>
             <tr><td>Longitude range</td><td>${fmtNumber(Math.min(...lons),6)} – ${fmtNumber(Math.max(...lons),6)}</td></tr>
+            ${horizontalAccuracyRow}
           </table>`;
       } else { statsBox.innerHTML = ''; }
     }
