@@ -177,35 +177,7 @@
     #progressBar{ background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
 
     .muted{ color: var(--muted); }
-    .visual-wrapper{ position: relative; padding-top: 28px; }
-    .copy-icon-btn{
-      position:absolute;
-      top:4px;
-      left:8px;
-      width:28px;
-      height:28px;
-      border:none;
-      border-radius:999px;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background: rgba(17,24,39,0.75);
-      color: var(--text);
-      cursor:pointer;
-      transition: opacity .15s ease, transform .12s ease;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
-      opacity:0.82;
-      z-index: 20;
-    }
-    .copy-icon-btn.copied{
-      background: var(--brand);
-      color:#fff;
-      opacity:1;
-    }
-    .copy-icon-btn:hover{ opacity:1; transform: translateY(-1px); }
-    .copy-icon-btn:active{ transform: translateY(0); opacity:0.95; }
-    .copy-icon-btn svg{ width:14px; height:14px; }
-    .copy-icon-btn[disabled]{ cursor: not-allowed; opacity:0.45; box-shadow:none; }
+    .visual-wrapper{ position: relative; }
 
     /* Robust form grid for Map controls */
     .controls-grid{
@@ -389,11 +361,6 @@
 
           <div id="statsBox"></div>
           <div id="chartWrapper" class="visual-wrapper">
-            <button type="button" id="copyChartBtn" class="copy-icon-btn" title="Copy chart to clipboard" aria-label="Copy chart to clipboard" disabled>
-              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M6 2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V2Zm2 0v10h10V2H8Zm-4 4a2 2 0 0 1 2-2h1v2H6v8h8v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2Z"/>
-              </svg>
-            </button>
             <canvas id="chartCanvas" height="340"></canvas>
           </div>
           <div id="aggTable" style="margin-top:12px;"></div>
@@ -453,11 +420,6 @@
           <div id="mapMessage" class="muted"></div>
           <!-- Hidden until we have valid data -->
           <div id="mapWrapper" class="visual-wrapper" style="display:none;">
-            <button type="button" id="copyMapBtn" class="copy-icon-btn" title="Copy map to clipboard" aria-label="Copy map to clipboard" disabled>
-              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M6 2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V2Zm2 0v10h10V2H8Zm-4 4a2 2 0 0 1 2-2h1v2H6v8h8v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2Z"/>
-              </svg>
-            </button>
             <div id="map"></div>
           </div>
 
@@ -513,14 +475,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js"></script>
 
   <script>
     const versionLabel = document.getElementById("appVersion");
-    const copyChartBtn = document.getElementById('copyChartBtn');
-    const copyMapBtn = document.getElementById('copyMapBtn');
-    const copyChartDefaultTitle = copyChartBtn ? copyChartBtn.title : '';
-    const copyMapDefaultTitle = copyMapBtn ? copyMapBtn.title : '';
     let APP_VERSION = "";
 
     async function loadAppVersion(){
@@ -541,108 +498,6 @@
       }
     }
     loadAppVersion();
-
-    function flashCopyButton(btn){
-      if(!btn) return;
-      btn.classList.add('copied');
-      setTimeout(()=>btn.classList.remove('copied'), 1200);
-    }
-
-    function supportsImageClipboard(){
-      return !!(navigator.clipboard && window.ClipboardItem);
-    }
-
-    async function canvasToClipboard(canvas){
-      if(!canvas) throw new Error('Chart is not ready yet.');
-      if(!supportsImageClipboard()) throw new Error('Copy to clipboard not supported in this browser.');
-      const blob = await new Promise((resolve, reject)=>{
-        canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not render chart image.')), 'image/png');
-      });
-      if(!blob) throw new Error('No image data generated.');
-      const item = new ClipboardItem({ 'image/png': blob });
-      await navigator.clipboard.write([item]);
-    }
-
-    async function elementToClipboard(el, background='#0b0f14'){
-      if(!el) throw new Error('Map is not ready yet.');
-      if(!supportsImageClipboard()) throw new Error('Copy to clipboard not supported in this browser.');
-      if(!(window.htmlToImage && typeof window.htmlToImage.toBlob === 'function')){
-        throw new Error('Map copy helper is unavailable.');
-      }
-      const blob = await window.htmlToImage.toBlob(el, {
-        backgroundColor: background,
-        pixelRatio: 2
-      });
-      if(!blob) throw new Error('Could not render map image.');
-      const item = new ClipboardItem({ 'image/png': blob });
-      await navigator.clipboard.write([item]);
-    }
-
-    function setChartCopyEnabled(enabled){
-      if(!copyChartBtn) return;
-      const canCopy = supportsImageClipboard();
-      copyChartBtn.disabled = !(enabled && canCopy);
-      copyChartBtn.title = canCopy && copyChartDefaultTitle ? copyChartDefaultTitle : (!canCopy ? 'Copy to clipboard is not supported in this browser' : copyChartBtn.title);
-      if(!enabled) copyChartBtn.classList.remove('copied');
-    }
-
-    function setMapCopyEnabled(enabled){
-      if(!copyMapBtn) return;
-      const canCopy = supportsImageClipboard();
-      copyMapBtn.disabled = !(enabled && canCopy);
-      copyMapBtn.title = canCopy && copyMapDefaultTitle ? copyMapDefaultTitle : (!canCopy ? 'Copy to clipboard is not supported in this browser' : copyMapBtn.title);
-      if(!enabled) copyMapBtn.classList.remove('copied');
-    }
-
-    setChartCopyEnabled(false);
-    setMapCopyEnabled(false);
-
-    async function handleCopyChart(){
-      if(!copyChartBtn) return;
-      const canvas = document.getElementById('chartCanvas');
-      if(!chartRef || !canvas){
-        showError('Generate the chart first before copying.');
-        return;
-      }
-      const prevDisabled = copyChartBtn.disabled;
-      try{
-        copyChartBtn.disabled = true;
-        await canvasToClipboard(canvas);
-        copyChartBtn.disabled = false;
-        flashCopyButton(copyChartBtn);
-      } catch(err){
-        console.error('Copy chart failed', err);
-        showError('Copy chart failed: ' + (err && err.message ? err.message : err));
-      } finally {
-        copyChartBtn.disabled = prevDisabled;
-      }
-    }
-
-    async function handleCopyMap(){
-      if(!copyMapBtn) return;
-      const mapEl = document.getElementById('map');
-      const mapWrapper = document.getElementById('mapWrapper');
-      if(!mapEl || !mapWrapper || mapWrapper.style.display === 'none' || mapEl.offsetParent === null){
-        showError('Generate the map first before copying.');
-        return;
-      }
-      const prevDisabled = copyMapBtn.disabled;
-      try{
-        copyMapBtn.disabled = true;
-        const bg = getComputedStyle(document.body).backgroundColor || '#0b0f14';
-        await elementToClipboard(mapEl, bg);
-        copyMapBtn.disabled = false;
-        flashCopyButton(copyMapBtn);
-      } catch(err){
-        console.error('Copy map failed', err);
-        showError('Copy map failed: ' + (err && err.message ? err.message : err));
-      } finally {
-        copyMapBtn.disabled = prevDisabled;
-      }
-    }
-
-    if(copyChartBtn){ copyChartBtn.addEventListener('click', handleCopyChart); }
-    if(copyMapBtn){ copyMapBtn.addEventListener('click', handleCopyMap); }
 
     const DEFAULT_FIELD_GROUP_ORDER = ['gnss','status','cmdq','counts','jsons','meta'];
     const LEGACY_FIELD_GROUPS = {
@@ -1539,7 +1394,6 @@
           }
         }
       });
-      setChartCopyEnabled(true);
     }
 
     function renderTimeLineMulti({ points1, label1, points2=null, label2=null, title='', xLabel='', yLabel='', y1Label='' }){
@@ -1597,7 +1451,6 @@
           }
         }
       });
-      setChartCopyEnabled(true);
     }
 
     function renderTimeBar({ points, label, title='', xLabel='', yLabel='' }){
@@ -1626,7 +1479,6 @@
           }
         }
       });
-      setChartCopyEnabled(true);
     }
 
     function renderStatsBox(values, field){
@@ -1661,8 +1513,7 @@
     function downloadAggregateCSV(){ if(!aggTableRef){ showError('No result table to download.'); return; } aggTableRef.download('csv', (logFileName || 'decoded') + '_analysis.csv'); }
 
     function generateAnalysis(){
-      if(!analyticsCache){ setChartCopyEnabled(false); return; }
-      setChartCopyEnabled(false);
+      if(!analyticsCache) return;
       const { rows } = analyticsCache;
 
       const fieldX = document.getElementById('fieldSelect').value;
@@ -1986,7 +1837,6 @@
       // Hide map before evaluation
       if(mapEl) mapEl.style.display = 'none';
       if(mapWrapper) mapWrapper.style.display = 'none';
-      setMapCopyEnabled(false);
       if(msgEl) msgEl.textContent = '';
 
       if(!analyticsCache){
@@ -2081,8 +1931,6 @@
       // Show map now that we have data
       if(mapEl) mapEl.style.display = 'block';
       if(mapWrapper) mapWrapper.style.display = 'block';
-      setMapCopyEnabled(true);
-
       // Table
       renderMapTable(points.map(p => ({
         timestamp: p.tsLabel,
