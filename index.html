@@ -433,7 +433,7 @@
             </div>
             <div class="control" id="zeroFilterWrapper">
               <label>Coordinate filter</label>
-              <label><input type="checkbox" id="ignoreZeroCoords"> Ignore lat=0 or lon=0</label>
+              <label><input type="checkbox" id="ignoreZeroCoords" checked> Ignore lat=0 or lon=0</label>
             </div>
             <div class="control" id="trackWrapper">
               <label>Track</label>
@@ -2022,10 +2022,12 @@
       const ignoreZeros = document.getElementById('ignoreZeroCoords') && document.getElementById('ignoreZeroCoords').checked;
 
       const points = [];
+      let zeroCoordinateCount = 0;
       fr.forEach(r => {
         const lat = numericValue(r, pickedLat);
         const lon = numericValue(r, pickedLon);
         if(lat==null || lon==null) return;
+        if(lat === 0 || lon === 0) zeroCoordinateCount++;
         if(lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
         if(ignoreZeros && (lat === 0 || lon === 0)) return;
         const horizontalAccuracy = numericValue(r, 'h_acc_est');
@@ -2042,9 +2044,35 @@
       });
       setDateRangeFromRows(points, 'mapStartTime', 'mapEndTime', point => point.timestampMs);
 
+      const statsBox = document.getElementById('mapStatsBox');
+      const totalLocationMessages = fr.length;
+      const failedFixPercentage = totalLocationMessages
+        ? (zeroCoordinateCount / totalLocationMessages) * 100
+        : 0;
+      const renderMapStats = () => {
+        if(!statsBox) return;
+        const coordinateRows = points.length ? `
+            <tr><td>Latitude range</td><td>${fmtNumber(Math.min(...points.map(p=>p.lat)),6)} – ${fmtNumber(Math.max(...points.map(p=>p.lat)),6)}</td></tr>
+            <tr><td>Longitude range</td><td>${fmtNumber(Math.min(...points.map(p=>p.lon)),6)} – ${fmtNumber(Math.max(...points.map(p=>p.lon)),6)}</td></tr>` : '';
+        const horizontalAccuracies = points.map(p=>p.horizontalAccuracy).filter(v=>v!=null);
+        const horizontalAccuracyRow = horizontalAccuracies.length
+          ? `<tr><td>Horizontal accuracy estimate range</td><td>${fmtNumber(Math.min(...horizontalAccuracies))} – ${fmtNumber(Math.max(...horizontalAccuracies))} m</td></tr>`
+          : '';
+        statsBox.innerHTML = `
+          <h3>Map summary</h3>
+          <table>
+            <tr><td>Total location messages</td><td>${totalLocationMessages}</td></tr>
+            <tr><td>Failed GPS fixes (lat=0 or lon=0)</td><td>${zeroCoordinateCount} (${fmtNumber(failedFixPercentage, 1)}%)</td></tr>
+            <tr><td>Displayed points</td><td>${points.length}</td></tr>
+            ${coordinateRows}
+            ${horizontalAccuracyRow}
+          </table>`;
+      };
+      renderMapStats();
+
       if(!points.length){
         if(msgEl) msgEl.textContent = 'no valid location data found';
-        renderMapTable([]); const statsBox = document.getElementById('mapStatsBox'); if(statsBox) statsBox.innerHTML = '';
+        renderMapTable([]);
         if(mapRef){ mapPointsLayer.clearLayers(); mapTrackLayer.clearLayers(); }
         return;
       }
@@ -2100,23 +2128,6 @@
         }
       }, 0);
 
-      // Stats
-      const statsBox = document.getElementById('mapStatsBox');
-      if(points.length){
-        const lats = points.map(p=>p.lat), lons = points.map(p=>p.lon);
-        const horizontalAccuracies = points.map(p=>p.horizontalAccuracy).filter(v=>v!=null);
-        const horizontalAccuracyRow = horizontalAccuracies.length
-          ? `<tr><td>Horizontal accuracy estimate range</td><td>${fmtNumber(Math.min(...horizontalAccuracies))} – ${fmtNumber(Math.max(...horizontalAccuracies))} m</td></tr>`
-          : '';
-        statsBox.innerHTML = `
-          <h3>Map summary</h3>
-          <table>
-            <tr><td>Points</td><td>${points.length}</td></tr>
-            <tr><td>Latitude range</td><td>${fmtNumber(Math.min(...lats),6)} – ${fmtNumber(Math.max(...lats),6)}</td></tr>
-            <tr><td>Longitude range</td><td>${fmtNumber(Math.min(...lons),6)} – ${fmtNumber(Math.max(...lons),6)}</td></tr>
-            ${horizontalAccuracyRow}
-          </table>`;
-      } else { statsBox.innerHTML = ''; }
     }
 
     // ---------- Summary blocks ----------
