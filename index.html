@@ -60,8 +60,34 @@
     #mapMessage { margin-top:10px; }
 
     /* Outlier controls */
-    .inline-inputs { display:flex; gap:8px; align-items:center; }
-    .inline-inputs input { width: 100%; min-width: 0; }
+    .range-values{ display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; }
+    .range-values output{ color:var(--text); font-variant-numeric:tabular-nums; }
+    .dual-range{ position:relative; height:28px; --range-start:0%; --range-end:100%; }
+    .dual-range-track{
+      position:absolute; left:0; right:0; top:12px; height:4px; border-radius:999px;
+      background:linear-gradient(to right,
+        rgba(255,255,255,.18) 0 var(--range-start),
+        var(--brand) var(--range-start) var(--range-end),
+        rgba(255,255,255,.18) var(--range-end) 100%);
+    }
+    .dual-range input[type="range"]{
+      position:absolute; left:0; top:0; width:100%; height:28px; margin:0;
+      appearance:none; -webkit-appearance:none; background:transparent; pointer-events:none;
+    }
+    .dual-range input[type="range"]::-webkit-slider-runnable-track{ height:4px; background:transparent; }
+    .dual-range input[type="range"]::-moz-range-track{ height:4px; background:transparent; }
+    .dual-range input[type="range"]::-webkit-slider-thumb{
+      appearance:none; -webkit-appearance:none; width:18px; height:18px; margin-top:-7px;
+      border:2px solid var(--brand); border-radius:50%; background:var(--bg-elev); cursor:pointer; pointer-events:auto;
+    }
+    .dual-range input[type="range"]::-moz-range-thumb{
+      width:18px; height:18px; border:2px solid var(--brand); border-radius:50%;
+      background:var(--bg-elev); cursor:pointer; pointer-events:auto;
+    }
+    .dual-range input[type="range"]:focus-visible::-webkit-slider-thumb{ outline:2px solid #fff; outline-offset:2px; }
+    .dual-range input[type="range"]:focus-visible::-moz-range-thumb{ outline:2px solid #fff; outline-offset:2px; }
+    .dual-range input[type="range"]:disabled::-webkit-slider-thumb{ cursor:not-allowed; opacity:.45; }
+    .dual-range input[type="range"]:disabled::-moz-range-thumb{ cursor:not-allowed; opacity:.45; }
     .dim { color:#666; font-size:12px; }
 
     /* Keep outlier rows full width */
@@ -276,7 +302,7 @@
               <label for="fieldSelect2">Second Field (line – optional)</label>
               <select id="fieldSelect2"><option value="">—</option></select>
             </div>
-            <div>
+            <div id="scatterYFieldWrapper">
               <label for="fieldSelectY">Field (Y, for scatter – optional)</label>
               <select id="fieldSelectY"><option value="">—</option></select>
             </div>
@@ -304,24 +330,30 @@
 
             <!-- Outlier filter: X -->
             <div id="outlierXWrapper">
-              <label>Outlier filter (X)</label>
-              <div class="inline-inputs">
-                <span class="dim">min</span>
-                <input id="minX" type="number" step="any" placeholder="auto" />
-                <span class="dim">max</span>
-                <input id="maxX" type="number" step="any" placeholder="auto" />
+              <label id="outlierXLabel">Outlier filter (X)</label>
+              <div class="range-values">
+                <span>Min: <output id="minXValue">—</output></span>
+                <span>Max: <output id="maxXValue">—</output></span>
+              </div>
+              <div class="dual-range" id="xRangeSlider">
+                <div class="dual-range-track"></div>
+                <input id="minX" type="range" aria-label="Minimum X value" />
+                <input id="maxX" type="range" aria-label="Maximum X value" />
               </div>
               <div class="dim" id="xRangeHint"></div>
             </div>
 
-            <!-- Outlier filter: Y (scatter only) -->
+            <!-- Outlier filter: active secondary field -->
             <div id="outlierYWrapper" style="display:none;">
-              <label>Outlier filter (Y)</label>
-              <div class="inline-inputs">
-                <span class="dim">min</span>
-                <input id="minY" type="number" step="any" placeholder="auto" />
-                <span class="dim">max</span>
-                <input id="maxY" type="number" step="any" placeholder="auto" />
+              <label id="outlierYLabel">Outlier filter (Y)</label>
+              <div class="range-values">
+                <span>Min: <output id="minYValue">—</output></span>
+                <span>Max: <output id="maxYValue">—</output></span>
+              </div>
+              <div class="dual-range" id="yRangeSlider">
+                <div class="dual-range-track"></div>
+                <input id="minY" type="range" aria-label="Minimum Y value" />
+                <input id="maxY" type="range" aria-label="Maximum Y value" />
               </div>
               <div class="dim" id="yRangeHint"></div>
             </div>
@@ -1088,6 +1120,15 @@
 
     // Outlier auto-range flags
     let needRecalcX = true, needRecalcY = true;
+    let analysisRenderFrame = null;
+
+    function scheduleGenerateAnalysis(){
+      if(analysisRenderFrame != null) return;
+      analysisRenderFrame = requestAnimationFrame(() => {
+        analysisRenderFrame = null;
+        generateAnalysis();
+      });
+    }
 
     function floorToBucketLocal(d, bucket){
       const dt = new Date(d);
@@ -1137,19 +1178,11 @@
     }
 
     function resetOutlierX(){
-      const minXEl = document.getElementById('minX');
-      const maxXEl = document.getElementById('maxX');
-      if(minXEl) minXEl.value = '';
-      if(maxXEl) maxXEl.value = '';
       const hint = document.getElementById('xRangeHint');
       if(hint) hint.textContent = 'auto range will be computed from data';
       needRecalcX = true;
     }
     function resetOutlierY(){
-      const minYEl = document.getElementById('minY');
-      const maxYEl = document.getElementById('maxY');
-      if(minYEl) minYEl.value = '';
-      if(maxYEl) maxYEl.value = '';
       const hint = document.getElementById('yRangeHint');
       if(hint) hint.textContent = 'auto range will be computed from data';
       needRecalcY = true;
@@ -1178,7 +1211,7 @@
       document.getElementById('genBtn').onclick = generateAnalysis;
       document.getElementById('downloadAggBtn').onclick = downloadAggregateCSV;
       const ct = document.getElementById('chartType');
-      if(ct){ ct.onchange = () => { updateChartUI(); toggleOutlierUI(); }; }
+      if(ct){ ct.onchange = () => { updateChartUI(); resetOutlierY(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
       updateChartUI();
       toggleOutlierUI();
 
@@ -1187,16 +1220,36 @@
       const dlMapBtn = document.getElementById('downloadMapBtn');
       if(dlMapBtn){ dlMapBtn.onclick = downloadMapCSV; }
 
-      // Reset outlier ranges when fields change
-      if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); }; }
-      if(selY){ selY.onchange = () => { resetOutlierY(); toggleOutlierUI(); }; }
+      // Recalculate ranges when fields or row-level filters change.
+      if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
+      if(sel2){ sel2.onchange = () => { resetOutlierY(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
+      if(selY){ selY.onchange = () => { resetOutlierY(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
+      ['portFilter','startTime','endTime'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.onchange = () => { resetOutlierX(); resetOutlierY(); scheduleGenerateAnalysis(); };
+      });
+      ['bucketSelect','aggSelect'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.onchange = scheduleGenerateAnalysis;
+      });
+      ['minX','maxX','minY','maxY'].forEach(id => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.oninput = () => {
+          const axis = id.endsWith('X') ? 'X' : 'Y';
+          constrainDualRange(axis, id.startsWith('min') ? 'min' : 'max');
+          scheduleGenerateAnalysis();
+        };
+      });
     }
 
     function updateChartUI(){
       const ct = document.getElementById('chartType').value;
       const isLine = ct === 'line';
       const y2W = document.getElementById('secondFieldWrapper');
+      const scatterYW = document.getElementById('scatterYFieldWrapper');
       if(y2W) y2W.style.display = isLine ? 'block' : 'none';
+      if(scatterYW) scatterYW.style.display = ct === 'scatter' ? 'block' : 'none';
     }
 
     function parseLocalDateTimeInput(el){
@@ -1332,14 +1385,118 @@
       }
     }
 
+    function getSecondaryOutlierField(chartType, field2, fieldY){
+      if(chartType === 'line') return field2 || '';
+      if(chartType === 'scatter') return fieldY || '';
+      return '';
+    }
+
+    function rangeStep(field){
+      if(INTEGERISH.has(field)) return 1;
+      return 'any';
+    }
+
+    function updateDualRangeVisual(axis, field){
+      const minEl = document.getElementById(`min${axis}`);
+      const maxEl = document.getElementById(`max${axis}`);
+      const minOutput = document.getElementById(`min${axis}Value`);
+      const maxOutput = document.getElementById(`max${axis}Value`);
+      const slider = document.getElementById(`${axis.toLowerCase()}RangeSlider`);
+      if(!minEl || !maxEl || !slider) return;
+
+      const minBound = Number(minEl.min);
+      const maxBound = Number(minEl.max);
+      const minValue = Number(minEl.value);
+      const maxValue = Number(maxEl.value);
+      const span = maxBound - minBound;
+      const start = span > 0 ? ((minValue - minBound) / span) * 100 : 0;
+      const end = span > 0 ? ((maxValue - minBound) / span) * 100 : 100;
+      slider.style.setProperty('--range-start', `${Math.max(0, Math.min(100, start))}%`);
+      slider.style.setProperty('--range-end', `${Math.max(0, Math.min(100, end))}%`);
+      const precision = Object.prototype.hasOwnProperty.call(FIELD_PRECISION, field) ? FIELD_PRECISION[field] : null;
+      if(minOutput) minOutput.value = Number.isFinite(minValue) ? fmtNumber(minValue, precision) : '—';
+      if(maxOutput) maxOutput.value = Number.isFinite(maxValue) ? fmtNumber(maxValue, precision) : '—';
+    }
+
+    function constrainDualRange(axis, changedHandle){
+      const minEl = document.getElementById(`min${axis}`);
+      const maxEl = document.getElementById(`max${axis}`);
+      if(!minEl || !maxEl) return;
+      let minValue = Number(minEl.value);
+      let maxValue = Number(maxEl.value);
+      if(minValue > maxValue){
+        if(changedHandle === 'min') maxEl.value = minEl.value;
+        else minEl.value = maxEl.value;
+      }
+      updateDualRangeVisual(axis, minEl.dataset.field || '');
+    }
+
+    function configureDualRange(axis, values, field, forceReset){
+      const minEl = document.getElementById(`min${axis}`);
+      const maxEl = document.getElementById(`max${axis}`);
+      const hint = document.getElementById(`${axis.toLowerCase()}RangeHint`);
+      const label = document.getElementById(`outlier${axis}Label`);
+      const minOutput = document.getElementById(`min${axis}Value`);
+      const maxOutput = document.getElementById(`max${axis}Value`);
+      if(!minEl || !maxEl) return;
+      if(label) label.textContent = field ? `Outlier filter (${axis}): ${formatFieldLabel(field)}` : `Outlier filter (${axis})`;
+
+      if(!field || !values.length){
+        minEl.disabled = true;
+        maxEl.disabled = true;
+        if(minOutput) minOutput.value = '—';
+        if(maxOutput) maxOutput.value = '—';
+        if(hint) hint.textContent = field ? 'no numeric values found' : 'select a field';
+        return;
+      }
+
+      let dataMin = Infinity;
+      let dataMax = -Infinity;
+      values.forEach(value => {
+        dataMin = Math.min(dataMin, value);
+        dataMax = Math.max(dataMax, value);
+      });
+      const step = rangeStep(field);
+      const fieldChanged = minEl.dataset.field !== field;
+      minEl.min = maxEl.min = String(dataMin);
+      minEl.max = maxEl.max = String(dataMax);
+      minEl.step = maxEl.step = String(step);
+      minEl.dataset.field = maxEl.dataset.field = field;
+      minEl.disabled = maxEl.disabled = dataMin === dataMax;
+
+      if(forceReset || fieldChanged || !Number.isFinite(Number(minEl.value)) || !Number.isFinite(Number(maxEl.value))){
+        minEl.value = String(dataMin);
+        maxEl.value = String(dataMax);
+      } else {
+        minEl.value = String(Math.max(dataMin, Math.min(dataMax, Number(minEl.value))));
+        maxEl.value = String(Math.max(dataMin, Math.min(dataMax, Number(maxEl.value))));
+        if(Number(minEl.value) > Number(maxEl.value)){
+          minEl.value = String(dataMin);
+          maxEl.value = String(dataMax);
+        }
+      }
+
+      const precision = Object.prototype.hasOwnProperty.call(FIELD_PRECISION, field) ? FIELD_PRECISION[field] : null;
+      if(hint) hint.textContent = `Available range: ${fmtNumber(dataMin, precision)} to ${fmtNumber(dataMax, precision)}`;
+      updateDualRangeVisual(axis, field);
+    }
+
+    function dualRangeIsRestricted(axis){
+      const minEl = document.getElementById(`min${axis}`);
+      const maxEl = document.getElementById(`max${axis}`);
+      if(!minEl || !maxEl) return false;
+      return Number(minEl.value) > Number(minEl.min) || Number(maxEl.value) < Number(maxEl.max);
+    }
+
     function toggleOutlierUI(){
       const ct = document.getElementById('chartType').value;
-      const isScatter = ct === 'scatter';
-      const ySelected = !!document.getElementById('fieldSelectY').value;
+      const field2 = document.getElementById('fieldSelect2').value;
+      const fieldY = document.getElementById('fieldSelectY').value;
+      const ySelected = !!getSecondaryOutlierField(ct, field2, fieldY);
       const xWrap = document.getElementById('outlierXWrapper');
       const yWrap = document.getElementById('outlierYWrapper');
       if(xWrap) xWrap.style.display = 'block';
-      if(yWrap) yWrap.style.display = (isScatter && ySelected) ? 'block' : 'none';
+      if(yWrap) yWrap.style.display = ySelected ? 'block' : 'none';
     }
 
     function chooseTimeUnit(points){
@@ -1537,40 +1694,31 @@
       const bucketSuffix = bucket !== 'none' ? `per ${bucket}` : '';
       const aggLabelX = bucket !== 'none' ? formatAggregateLabel(fieldX, agg, bucketSuffix) : fieldXLabel;
       const aggLabel2 = (bucket !== 'none' && field2) ? formatAggregateLabel(field2, agg, bucketSuffix) : field2Label;
+      const secondaryOutlierField = getSecondaryOutlierField(chartType, field2, fieldY);
 
       const valuesXAll = fr0.map(r => numericValue(r, fieldX)).filter(v=>v!=null);
-      const valuesYAll = (chartType==='scatter' && fieldY) ? fr0.map(r => numericValue(r, fieldY)).filter(v=>v!=null) : [];
+      const valuesYAll = secondaryOutlierField
+        ? fr0.map(r => numericValue(r, secondaryOutlierField)).filter(v=>v!=null)
+        : [];
 
       const minXEl = document.getElementById('minX'), maxXEl = document.getElementById('maxX');
       const minYEl = document.getElementById('minY'), maxYEl = document.getElementById('maxY');
 
-      if(minXEl && maxXEl && (needRecalcX || !minXEl.value || !maxXEl.value)){
-        if(valuesXAll.length){
-          const min = Math.min(...valuesXAll), max = Math.max(...valuesXAll);
-          minXEl.value = String(min); maxXEl.value = String(max);
-          const hint = document.getElementById('xRangeHint'); if(hint) hint.textContent = `auto range from data: [${fmtNumber(min)}, ${fmtNumber(max)}]`;
-        } else { minXEl.value = ''; maxXEl.value = ''; const h=document.getElementById('xRangeHint'); if(h) h.textContent='no numeric values found'; }
-        needRecalcX = false;
-      }
-      if(chartType==='scatter' && fieldY && minYEl && maxYEl && (needRecalcY || !minYEl.value || !maxYEl.value)){
-        if(valuesYAll.length){
-          const min = Math.min(...valuesYAll), max = Math.max(...valuesYAll);
-          minYEl.value = String(min); maxYEl.value = String(max);
-          const hint = document.getElementById('yRangeHint'); if(hint) hint.textContent = `auto range from data: [${fmtNumber(min)}, ${fmtNumber(max)}]`;
-        } else { minYEl.value = ''; maxYEl.value = ''; const h=document.getElementById('yRangeHint'); if(h) h.textContent='no numeric values found'; }
-        needRecalcY = false;
-      }
+      configureDualRange('X', valuesXAll, fieldX, needRecalcX);
+      configureDualRange('Y', valuesYAll, secondaryOutlierField, needRecalcY);
+      needRecalcX = false;
+      needRecalcY = false;
 
       let fr = fr0;
-      if(minXEl && maxXEl){
+      if(minXEl && maxXEl && valuesXAll.length){
         const minX = parseFloat(minXEl.value), maxX = parseFloat(maxXEl.value);
         const useX = Number.isFinite(minX) && Number.isFinite(maxX);
         fr = fr.filter(r => { const vx = numericValue(r, fieldX); return useX ? (vx!=null && vx>=minX && vx<=maxX) : (vx!=null); });
       }
-      if(chartType==='scatter' && fieldY && minYEl && maxYEl){
+      if(secondaryOutlierField && minYEl && maxYEl && valuesYAll.length && dualRangeIsRestricted('Y')){
         const minY = parseFloat(minYEl.value), maxY = parseFloat(maxYEl.value);
         const useY = Number.isFinite(minY) && Number.isFinite(maxY);
-        fr = fr.filter(r => { const vy = numericValue(r, fieldY); return useY ? (vy!=null && vy>=minY && vy<=maxY) : (vy!=null); });
+        fr = fr.filter(r => { const vy = numericValue(r, secondaryOutlierField); return useY ? (vy!=null && vy>=minY && vy<=maxY) : (vy!=null); });
       }
 
       if(chartType === 'scatter' && fieldY){
