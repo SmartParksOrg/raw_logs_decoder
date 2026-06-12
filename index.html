@@ -2056,7 +2056,8 @@
             <tr><td>Longitude range</td><td>${fmtNumber(Math.min(...points.map(p=>p.lon)),6)} – ${fmtNumber(Math.max(...points.map(p=>p.lon)),6)}</td></tr>` : '';
         const horizontalAccuracies = points.map(p=>p.horizontalAccuracy).filter(v=>v!=null);
         const horizontalAccuracyRow = horizontalAccuracies.length
-          ? `<tr><td>Horizontal accuracy estimate range</td><td>${fmtNumber(Math.min(...horizontalAccuracies))} – ${fmtNumber(Math.max(...horizontalAccuracies))} m</td></tr>`
+          ? `<tr><td>Horizontal accuracy estimate average</td><td>${fmtNumber(ss.mean(horizontalAccuracies), FIELD_PRECISION.h_acc_est)} m</td></tr>
+             <tr><td>Horizontal accuracy estimate range</td><td>${fmtNumber(Math.min(...horizontalAccuracies))} – ${fmtNumber(Math.max(...horizontalAccuracies))} m</td></tr>`
           : '';
         statsBox.innerHTML = `
           <h3>Map summary</h3>
