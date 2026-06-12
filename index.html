@@ -58,6 +58,11 @@
     /* Map block */
     #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
+    #mapTimeSliderWrapper{ margin-top:12px; }
+    #mapTimeSlider{ width:100%; accent-color:var(--brand); }
+    #mapTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
+    .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
+    .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
 
     /* Outlier controls */
     .range-values{ display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; }
@@ -453,6 +458,17 @@
           <!-- Hidden until we have valid data -->
           <div id="mapWrapper" class="visual-wrapper" style="display:none;">
             <div id="map"></div>
+          </div>
+
+          <div id="mapTimeSliderWrapper" style="display:none;">
+            <label for="mapTimeSlider">Map time</label>
+            <input id="mapTimeSlider" type="range" min="0" max="0" step="1" value="0" />
+            <div id="mapTimeSliderLabels" class="dim">
+              <span id="mapTimeStartLabel"></span>
+              <strong id="mapTimeCurrentLabel"></strong>
+              <span id="mapTimeEndLabel"></span>
+            </div>
+            <div class="map-latest-legend dim"><span class="map-latest-dot"></span> Latest visible location</div>
           </div>
 
           <div id="mapStatsBox" style="margin-top:12px;"></div>
@@ -1115,6 +1131,7 @@
     let mapTrackLayer = null;
     let mapCanvasRenderer = null;
     let mapTableRef = null;
+    let mapViewState = null;
     let bleScanTableRef = null;
     let bleScanChartRef = null;
 
@@ -1219,6 +1236,10 @@
       if(genMapBtn){ genMapBtn.onclick = generateMap; }
       const dlMapBtn = document.getElementById('downloadMapBtn');
       if(dlMapBtn){ dlMapBtn.onclick = downloadMapCSV; }
+      const mapTimeSlider = document.getElementById('mapTimeSlider');
+      if(mapTimeSlider){
+        mapTimeSlider.oninput = () => renderMapView(Number(mapTimeSlider.value), false);
+      }
 
       // Recalculate ranges when fields or row-level filters change.
       if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
@@ -1977,6 +1998,104 @@
       selectEl.value = value;
     }
 
+    function ensureMapInitialized(){
+      if(mapRef) return;
+      mapRef = L.map('map', { preferCanvas: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        crossOrigin: 'anonymous'
+      }).addTo(mapRef);
+      mapCanvasRenderer = L.canvas({ padding: 0.2 });
+      mapPointsLayer = L.layerGroup().addTo(mapRef);
+      mapTrackLayer = L.layerGroup().addTo(mapRef);
+    }
+
+    function renderMapStats(points, totalLocationMessages, zeroCoordinateCount){
+      const statsBox = document.getElementById('mapStatsBox');
+      if(!statsBox) return;
+      const failedFixPercentage = totalLocationMessages
+        ? (zeroCoordinateCount / totalLocationMessages) * 100
+        : 0;
+      const coordinateRows = points.length ? `
+          <tr><td>Latitude range</td><td>${fmtNumber(Math.min(...points.map(p=>p.lat)),6)} – ${fmtNumber(Math.max(...points.map(p=>p.lat)),6)}</td></tr>
+          <tr><td>Longitude range</td><td>${fmtNumber(Math.min(...points.map(p=>p.lon)),6)} – ${fmtNumber(Math.max(...points.map(p=>p.lon)),6)}</td></tr>` : '';
+      const horizontalAccuracies = points.map(p=>p.horizontalAccuracy).filter(v=>v!=null);
+      const horizontalAccuracyRows = horizontalAccuracies.length
+        ? `<tr><td>Horizontal accuracy estimate average</td><td>${fmtNumber(ss.mean(horizontalAccuracies), FIELD_PRECISION.h_acc_est)} m</td></tr>
+           <tr><td>Horizontal accuracy estimate range</td><td>${fmtNumber(Math.min(...horizontalAccuracies))} – ${fmtNumber(Math.max(...horizontalAccuracies))} m</td></tr>`
+        : '';
+      statsBox.innerHTML = `
+        <h3>Map summary</h3>
+        <table>
+          <tr><td>Total location messages</td><td>${totalLocationMessages}</td></tr>
+          <tr><td>Failed GPS fixes (lat=0 or lon=0)</td><td>${zeroCoordinateCount} (${fmtNumber(failedFixPercentage, 1)}%)</td></tr>
+          <tr><td>Displayed points</td><td>${points.length}</td></tr>
+          ${coordinateRows}
+          ${horizontalAccuracyRows}
+        </table>`;
+    }
+
+    function renderMapView(sliderIndex, fitBounds){
+      if(!mapViewState) return;
+      const { points, totalLocationMessages, zeroCoordinateCount, track } = mapViewState;
+      const maxIndex = Math.max(0, points.length - 1);
+      const index = Math.max(0, Math.min(maxIndex, Number.isFinite(sliderIndex) ? sliderIndex : maxIndex));
+      const visiblePoints = points.slice(0, index + 1);
+      const latestPoint = visiblePoints.length ? visiblePoints[visiblePoints.length - 1] : null;
+
+      const slider = document.getElementById('mapTimeSlider');
+      const currentLabel = document.getElementById('mapTimeCurrentLabel');
+      if(slider) slider.value = String(index);
+      if(currentLabel){
+        const timestampLabel = latestPoint && latestPoint.tsLabel ? latestPoint.tsLabel : 'Unknown time';
+        currentLabel.textContent = `${timestampLabel} (${visiblePoints.length}/${points.length} points)`;
+      }
+
+      renderMapTable(visiblePoints.map(p => ({
+        timestamp: p.tsLabel,
+        timestampMs: p.timestampMs,
+        latitude: p.lat,
+        longitude: p.lon,
+        h_acc_est: p.horizontalAccuracy
+      })));
+      renderMapStats(visiblePoints, totalLocationMessages, zeroCoordinateCount);
+
+      ensureMapInitialized();
+      mapPointsLayer.clearLayers();
+      mapTrackLayer.clearLayers();
+      visiblePoints.forEach(p => {
+        const isLatest = p === latestPoint;
+        const accuracyLabel = p.horizontalAccuracy == null
+          ? ''
+          : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
+        const latestLabel = isLatest ? '<strong>Latest location</strong><br>' : '';
+        const dot = L.circleMarker([p.lat, p.lon], {
+          radius: isLatest ? 7 : 3,
+          fillColor: isLatest ? '#ff8c00' : '#3388ff',
+          fillOpacity: isLatest ? 0.95 : 0.35,
+          color: isLatest ? '#ffffff' : '#3388ff',
+          weight: isLatest ? 2 : 0,
+          stroke: isLatest,
+          renderer: mapCanvasRenderer
+        }).bindPopup(`${latestLabel}${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
+        mapPointsLayer.addLayer(dot);
+      });
+
+      if(track && visiblePoints.length >= 2){
+        mapTrackLayer.addLayer(L.polyline(visiblePoints.map(p => [p.lat, p.lon]), {
+          color: '#cc3333', weight: 2, opacity: 0.7, renderer: mapCanvasRenderer
+        }));
+      }
+
+      if(fitBounds && visiblePoints.length){
+        setTimeout(() => {
+          mapRef.invalidateSize();
+          mapRef.fitBounds(L.latLngBounds(visiblePoints.map(p => [p.lat, p.lon])), { padding: [20,20], maxZoom: 16 });
+        }, 0);
+      }
+    }
+
     function generateMap(){
       const msgEl = document.getElementById('mapMessage');
       const mapEl = document.getElementById('map');
@@ -2040,38 +2159,22 @@
           tsLabel: timestampMs == null ? '' : parsedTs.toLocaleString()
         });
       });
+      points.sort((a, b) => {
+        if(a.timestampMs == null) return b.timestampMs == null ? 0 : -1;
+        if(b.timestampMs == null) return 1;
+        return a.timestampMs - b.timestampMs;
+      });
       setDateRangeFromRows(points, 'mapStartTime', 'mapEndTime', point => point.timestampMs);
 
-      const statsBox = document.getElementById('mapStatsBox');
       const totalLocationMessages = fr.length;
-      const failedFixPercentage = totalLocationMessages
-        ? (zeroCoordinateCount / totalLocationMessages) * 100
-        : 0;
-      const renderMapStats = () => {
-        if(!statsBox) return;
-        const coordinateRows = points.length ? `
-            <tr><td>Latitude range</td><td>${fmtNumber(Math.min(...points.map(p=>p.lat)),6)} – ${fmtNumber(Math.max(...points.map(p=>p.lat)),6)}</td></tr>
-            <tr><td>Longitude range</td><td>${fmtNumber(Math.min(...points.map(p=>p.lon)),6)} – ${fmtNumber(Math.max(...points.map(p=>p.lon)),6)}</td></tr>` : '';
-        const horizontalAccuracies = points.map(p=>p.horizontalAccuracy).filter(v=>v!=null);
-        const horizontalAccuracyRow = horizontalAccuracies.length
-          ? `<tr><td>Horizontal accuracy estimate average</td><td>${fmtNumber(ss.mean(horizontalAccuracies), FIELD_PRECISION.h_acc_est)} m</td></tr>
-             <tr><td>Horizontal accuracy estimate range</td><td>${fmtNumber(Math.min(...horizontalAccuracies))} – ${fmtNumber(Math.max(...horizontalAccuracies))} m</td></tr>`
-          : '';
-        statsBox.innerHTML = `
-          <h3>Map summary</h3>
-          <table>
-            <tr><td>Total location messages</td><td>${totalLocationMessages}</td></tr>
-            <tr><td>Failed GPS fixes (lat=0 or lon=0)</td><td>${zeroCoordinateCount} (${fmtNumber(failedFixPercentage, 1)}%)</td></tr>
-            <tr><td>Displayed points</td><td>${points.length}</td></tr>
-            ${coordinateRows}
-            ${horizontalAccuracyRow}
-          </table>`;
-      };
-      renderMapStats();
+      const sliderWrapper = document.getElementById('mapTimeSliderWrapper');
 
       if(!points.length){
         if(msgEl) msgEl.textContent = 'no valid location data found';
+        mapViewState = null;
+        if(sliderWrapper) sliderWrapper.style.display = 'none';
         renderMapTable([]);
+        renderMapStats([], totalLocationMessages, zeroCoordinateCount);
         if(mapRef){ mapPointsLayer.clearLayers(); mapTrackLayer.clearLayers(); }
         return;
       }
@@ -2079,51 +2182,21 @@
       // Show map now that we have data
       if(mapEl) mapEl.style.display = 'block';
       if(mapWrapper) mapWrapper.style.display = 'block';
-      // Table
-      renderMapTable(points.map(p => ({
-        timestamp: p.tsLabel,
-        timestampMs: p.timestampMs,
-        latitude: p.lat,
-        longitude: p.lon,
-        h_acc_est: p.horizontalAccuracy
-      })));
+      mapViewState = { points, totalLocationMessages, zeroCoordinateCount, track };
 
-      // Init map lazily
-      if(!mapRef){
-        mapRef = L.map('map', { preferCanvas: true });
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-          crossOrigin: 'anonymous'
-        }).addTo(mapRef);
-        mapCanvasRenderer = L.canvas({ padding: 0.2 });
-        mapPointsLayer = L.layerGroup().addTo(mapRef);
-        mapTrackLayer = L.layerGroup().addTo(mapRef);
+      const slider = document.getElementById('mapTimeSlider');
+      const startLabel = document.getElementById('mapTimeStartLabel');
+      const endLabel = document.getElementById('mapTimeEndLabel');
+      if(sliderWrapper) sliderWrapper.style.display = 'block';
+      if(slider){
+        slider.min = '0';
+        slider.max = String(points.length - 1);
+        slider.value = slider.max;
+        slider.disabled = points.length <= 1;
       }
-      mapPointsLayer.clearLayers(); mapTrackLayer.clearLayers();
-
-      // Dots
-      points.forEach(p => {
-        const accuracyLabel = p.horizontalAccuracy == null
-          ? ''
-          : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
-        const dot = L.circleMarker([p.lat, p.lon], {
-          radius: 3, fillColor: '#3388ff', fillOpacity: 0.35, stroke: false, renderer: mapCanvasRenderer
-        }).bindPopup(`${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
-        mapPointsLayer.addLayer(dot);
-      });
-
-      if(track && points.length >= 2){
-        const seq = points.filter(p => p.ts).sort((a,b) => a.ts - b.ts).map(p => [p.lat, p.lon]);
-        if(seq.length >= 2){ mapTrackLayer.addLayer(L.polyline(seq, { color: '#cc3333', weight: 2, opacity: 0.7, renderer: mapCanvasRenderer })); }
-      }
-
-      setTimeout(() => {
-        if(mapRef){
-          mapRef.invalidateSize();
-          mapRef.fitBounds(L.latLngBounds(points.map(p => [p.lat, p.lon])), { padding: [20,20] });
-        }
-      }, 0);
+      if(startLabel) startLabel.textContent = points[0].tsLabel || 'Unknown time';
+      if(endLabel) endLabel.textContent = points[points.length - 1].tsLabel || 'Unknown time';
+      renderMapView(points.length - 1, true);
 
     }
 
