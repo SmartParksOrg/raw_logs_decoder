@@ -61,7 +61,7 @@
     #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
     #mapTimeSliderWrapper{ margin-top:12px; }
-    #mapTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
+    #mapTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
 
@@ -222,6 +222,80 @@
     @media (max-width: 680px){ .controls-grid{ grid-template-columns: 1fr; } }
     .controls-grid .control{ display:flex; flex-direction:column; min-width:0; }
     .controls-grid .control > *:not(label){ width:100%; }
+
+    .dashboard-grid{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      align-items:stretch;
+    }
+    .dashboard-grid.full-width{ grid-template-columns: 1fr; }
+    .metric-strip{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .metric-tile{
+      background: var(--bg-elev);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px;
+      padding: 12px;
+      min-width:0;
+    }
+    .metric-tile .metric-label{ color:var(--muted); font-size:12px; margin-bottom:6px; }
+    .metric-tile .metric-value{ font-size:24px; line-height:1.1; font-weight:700; font-variant-numeric:tabular-nums; }
+    .metric-tile .metric-sub{ color:var(--muted); font-size:12px; margin-top:6px; }
+    .dashboard-panel{
+      background: var(--bg-elev);
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: 8px;
+      padding: 12px;
+      min-width:0;
+    }
+    .dashboard-panel h3{
+      margin: 0 0 8px;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+    .dashboard-chart{ height: 300px; position:relative; }
+    .chart-stats{ margin-top:10px; overflow-x:auto; }
+    .chart-stats table{ width:100%; border-collapse:collapse; font-size:12px; }
+    .chart-stats th, .chart-stats td{ padding:4px 6px; border-top:1px solid rgba(255,255,255,.08); text-align:right; white-space:nowrap; }
+    .chart-stats th:first-child, .chart-stats td:first-child{ text-align:left; }
+    @media (max-width: 900px){ .dashboard-grid{ grid-template-columns: 1fr; } }
+    #renderingOverlay{
+      position:fixed;
+      inset:0;
+      z-index:9999;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      background:rgba(5, 8, 12, .55);
+      backdrop-filter: blur(2px);
+    }
+    #renderingOverlay .rendering-dialog{
+      background:var(--panel);
+      color:var(--text);
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:8px;
+      padding:18px 20px;
+      min-width:260px;
+      box-shadow:var(--shadow);
+      display:flex;
+      align-items:center;
+      gap:12px;
+    }
+    .spinner{
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      border:3px solid rgba(255,255,255,.22);
+      border-top-color:var(--brand);
+      animation:spin .8s linear infinite;
+      flex:0 0 auto;
+    }
+    @keyframes spin{ to{ transform:rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -232,6 +306,15 @@
     </h1>
     <div id="appVersion" class="muted" style="margin: -2px 0 12px 0;">App version: (loading...)</div>
     <div id="errorBanner"></div>
+    <div id="renderingOverlay" aria-live="polite" aria-busy="true">
+      <div class="rendering-dialog">
+        <div class="spinner" aria-hidden="true"></div>
+        <div>
+          <strong>Rendering decoded results</strong>
+          <div class="muted">Preparing tables and graphs...</div>
+        </div>
+      </div>
+    </div>
 
     <!-- === DECODER SECTION === -->
     <details class="card" open>
@@ -518,6 +601,37 @@
       </div>
     </details>
 
+    <!-- === CMDQ DASHBOARD SECTION === -->
+    <details id="cmdqCard" class="card">
+      <summary><span class="chev">▸</span> Cardiac Monitoring Device Q</summary>
+      <div class="section-body">
+        <div id="cmdqPanel" style="display:none;">
+          <div class="controls-grid">
+            <div class="control" style="grid-column: 1 / -1;">
+              <label class="muted">&nbsp;</label>
+              <button id="genCmdqBtn" class="btn">Generate</button>
+            </div>
+          </div>
+          <div id="cmdqSummary" class="metric-strip"></div>
+          <div id="cmdqTimeSliderWrapper" style="display:none;">
+            <label>CMDQ time range</label>
+            <div class="dual-range" id="cmdqTimeRangeSlider">
+              <div class="dual-range-track"></div>
+              <input id="cmdqTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ start time" />
+              <input id="cmdqTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ end time" />
+            </div>
+            <div id="cmdqTimeSliderLabels" class="dim">
+              <span id="cmdqTimeStartLabel"></span>
+              <strong id="cmdqTimeCurrentLabel"></strong>
+              <span id="cmdqTimeEndLabel"></span>
+            </div>
+          </div>
+          <div id="cmdqCharts" class="dashboard-grid"></div>
+          <div id="cmdqTable" style="margin-top:12px;"></div>
+        </div>
+      </div>
+    </details>
+
     <!-- === LOG MESSAGES SECTION === -->
     <details class="card">
       <summary><span class="chev">▸</span> Log messages</summary>
@@ -683,6 +797,19 @@
       });
     }
 
+    function setRenderingBusy(isBusy){
+      const overlay = document.getElementById("renderingOverlay");
+      if(overlay) overlay.style.display = isBusy ? "flex" : "none";
+    }
+
+    function afterNextPaint(callback){
+      if(typeof requestAnimationFrame === "function"){
+        requestAnimationFrame(() => requestAnimationFrame(callback));
+      } else {
+        setTimeout(callback, 0);
+      }
+    }
+
     function loadDecoder(callback){
       clearError();
       const existing = document.getElementById("decoderScript");
@@ -743,17 +870,25 @@
     function decodeNextBlock(index){
       if (index >= base64Blocks.length) {
         document.getElementById("progressWrapper").style.display = "none";
-        buildTable(decodedOutput);
-        document.getElementById("exportButton").style.display = "inline-block";
-        document.getElementById("exportCsvButton").style.display = "inline-block";
-        document.getElementById("exportXlsButton").style.display = "inline-block";
-        decodeBtn.disabled = false;
-        isDecoding = false;
-        renderMessageSummary(decodedOutput);
-        renderBundledSummary(decodedOutput);
-        renderBleScanPanel(decodedOutput, true);
-        openOnlyCard("decodedSummaryCard");
-        prepareAnalytics();
+        setRenderingBusy(true);
+        afterNextPaint(() => {
+          try{
+            buildTable(decodedOutput);
+            document.getElementById("exportButton").style.display = "inline-block";
+            document.getElementById("exportCsvButton").style.display = "inline-block";
+            document.getElementById("exportXlsButton").style.display = "inline-block";
+            renderMessageSummary(decodedOutput);
+            renderBundledSummary(decodedOutput);
+            renderBleScanPanel(decodedOutput, true);
+            renderCmdqPanel(decodedOutput, true);
+            openOnlyCard("decodedSummaryCard");
+            prepareAnalytics();
+          } finally {
+            setRenderingBusy(false);
+            decodeBtn.disabled = false;
+            isDecoding = false;
+          }
+        });
         return;
       }
       try {
@@ -802,6 +937,10 @@
       document.getElementById("analyticsPanel").style.display = "none";
       document.getElementById("mapPanel").style.display = "none"; // also hide Map until data ready
       document.getElementById("bleScanPanel").style.display = "none";
+      const cmdqPanel = document.getElementById("cmdqPanel");
+      if (cmdqPanel) cmdqPanel.style.display = "none";
+      cmdqViewState = null;
+      if (typeof destroyCmdqDashboard === 'function') destroyCmdqDashboard();
       const tip = document.getElementById("logTip"); if (tip) tip.style.display = "none"; // hide tip until we have data
 
       const reader = new FileReader();
@@ -1134,6 +1273,17 @@
       loadDecoder();
       const genBleBtn = document.getElementById('genBleBtn');
       if(genBleBtn){ genBleBtn.onclick = () => renderBleScanPanel(decodedOutput); }
+      const genCmdqBtn = document.getElementById('genCmdqBtn');
+      if(genCmdqBtn){ genCmdqBtn.onclick = () => renderCmdqPanel(decodedOutput); }
+      ['cmdqTimeStartSlider','cmdqTimeEndSlider'].forEach(id => {
+        const slider = document.getElementById(id);
+        if(!slider) return;
+        slider.oninput = () => {
+          constrainCmdqTimeRange(id === 'cmdqTimeStartSlider' ? 'start' : 'end');
+          updateCmdqSliderLabels();
+        };
+        slider.onchange = () => renderCmdqView();
+      });
       ['startTime','endTime','mapStartTime','mapEndTime','bleStartTime','bleEndTime'].forEach((id) => {
         const input = document.getElementById(id);
         if(input) input.addEventListener('input', () => { input.dataset.userEdited = 'true'; });
@@ -1156,6 +1306,9 @@
     let mapViewState = null;
     let bleScanTableRef = null;
     let bleScanChartRef = null;
+    let cmdqTableRef = null;
+    let cmdqChartRefs = [];
+    let cmdqViewState = null;
 
     // Outlier auto-range flags
     let needRecalcX = true, needRecalcY = true;
@@ -2522,6 +2675,423 @@
       }catch(err){
         console.error('renderBleScanPanel failed', err);
       }
+    }
+
+    function destroyCmdqDashboard(){
+      cmdqChartRefs.forEach(chart => { try { chart.destroy(); } catch(e){} });
+      cmdqChartRefs = [];
+      if(cmdqTableRef){ try { cmdqTableRef.destroy(); } catch(e){} cmdqTableRef = null; }
+    }
+
+    function cmdqNumber(value){
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function collectCmdqRows(){
+      return getMessageRows()
+        .filter(row => String(row.port) === '15')
+        .map(row => {
+          const d = row.dataObj || {};
+          let timestampUtc = row.timestamp_utc || '';
+          if(!timestampUtc && d.cmdq_timestamp != null){
+            const ts = cmdqNumber(d.cmdq_timestamp);
+            if(ts != null) timestampUtc = new Date(ts * 1000).toISOString();
+          }
+          const timestampMs = timestampUtc ? Date.parse(timestampUtc) : NaN;
+          const rrMedian = cmdqNumber(d.cmdq_rr_median);
+          const temp = cmdqNumber(d.cmdq_temp != null ? d.cmdq_temp : d.cmdq_temperature);
+          const item = {
+            timestamp_utc: timestampUtc,
+            timestamp_local: timestampUtc ? new Date(timestampUtc).toLocaleString() : '',
+            timestampMs: Number.isFinite(timestampMs) ? timestampMs : null,
+            source_port: row.source_port,
+            cmdq_success: cmdqNumber(d.cmdq_success),
+            cmdq_temp: temp,
+            cmdq_rr_median_modesum: cmdqNumber(d.cmdq_rr_median_modesum),
+            cmdq_hrv: cmdqNumber(d.cmdq_hrv),
+            cmdq_rr_median: rrMedian,
+            bpm: rrMedian && rrMedian > 0 ? 6000 / rrMedian : null,
+            cmdq_activity_max: cmdqNumber(d.cmdq_activity_max),
+            cmdq_activity_average: cmdqNumber(d.cmdq_activity_average),
+            cmdq_active_min_in_last_hour: cmdqNumber(d.cmdq_active_min_in_last_hour),
+            cmdq_h_impedance: cmdqNumber(d.cmdq_h_impedance),
+            cmdq_raw_temp: cmdqNumber(d.cmdq_raw_temp),
+            cmdq_hrv_raw: cmdqNumber(d.cmdq_hrv_raw),
+            cmdq_timestamp: cmdqNumber(d.cmdq_timestamp)
+          };
+          return item;
+        })
+        .filter(row => [
+          'cmdq_success','cmdq_temp','cmdq_rr_median_modesum','cmdq_hrv','cmdq_rr_median',
+          'cmdq_activity_max','cmdq_activity_average','cmdq_active_min_in_last_hour','cmdq_h_impedance'
+        ].some(field => row[field] != null))
+        .sort((a,b) => {
+          if(a.timestampMs == null) return b.timestampMs == null ? 0 : 1;
+          if(b.timestampMs == null) return -1;
+          return a.timestampMs - b.timestampMs;
+        });
+    }
+
+    function averageNumeric(rows, field){
+      const values = rows.map(row => row[field]).filter(Number.isFinite);
+      if(!values.length) return null;
+      return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+
+    function renderMetricTile(label, value, sub=''){
+      return `
+        <div class="metric-tile">
+          <div class="metric-label">${label}</div>
+          <div class="metric-value">${value}</div>
+          ${sub ? `<div class="metric-sub">${sub}</div>` : ''}
+        </div>`;
+    }
+
+    const CMDQ_CHARTS = [
+      { id:'success', title:'CMDQ Success', series:[{ label:'Success', field:'cmdq_success', color:'#16a34a', stepped:true, boolean:true }], y:{ min:0, max:1, stepSize:1, boolean:true } },
+      { id:'temperature', title:'Temperature', series:[{ label:'Temperature', field:'cmdq_temp', color:'#1d4ed8', unit:' C' }], y:{ suggestedMin:25, suggestedMax:45 } },
+      { id:'rr_modesum', title:'5 Minute RR Median Modesum', series:[{ label:'RR_median_modesum', field:'cmdq_rr_median_modesum', color:'#991b1b' }] },
+      { id:'hrv', title:'HRV', series:[{ label:'HRV', field:'cmdq_hrv', color:'#b91c1c', unit:' ms' }] },
+      { id:'rr_median', title:'5 Minute RR Median', series:[{ label:'RR_median', field:'cmdq_rr_median', color:'#991b1b', unit:' x10ms' }] },
+      { id:'bpm', title:'Heart Rate (BPM)', series:[{ label:'BPM', field:'bpm', color:'#991b1b', unit:' BPM', borderWidth:3, pointRadius:4 }], y:{ suggestedMin:60, suggestedMax:200 } },
+      { id:'activity_max', title:'5 minute Activity Max', series:[{ label:'activity_max', field:'cmdq_activity_max', color:'#7e22ce' }], y:{ min:0, max:255 } },
+      { id:'activity_average', title:'5 Minute Activity Average', series:[{ label:'activity_average', field:'cmdq_activity_average', color:'#7e22ce' }], y:{ min:0, max:255 } },
+      { id:'activity_last_hour', title:'Activity Last Hour', series:[{ label:'activity_last_hour', field:'cmdq_active_min_in_last_hour', color:'#7e22ce', stepped:true }] },
+      { id:'impedance', title:'Hourly Impedance', series:[{ label:'impedance', field:'cmdq_h_impedance', color:'#c2410c' }], y:{ suggestedMin:0, suggestedMax:2000 } },
+      {
+        id:'bpm_activity',
+        title:'Heart Rate (BPM) / Activity',
+        series:[
+          { label:'BPM', field:'bpm', color:'#991b1b', unit:' BPM', yAxisID:'y1', borderWidth:3, pointRadius:4 },
+          { label:'activity_average', field:'cmdq_activity_average', color:'#7e22ce', yAxisID:'y' }
+        ],
+        y:{ min:0, max:255, title:'Activity' },
+        y1:{ position:'right', suggestedMin:60, suggestedMax:200, title:'BPM' }
+      },
+      {
+        id:'bpm_temperature',
+        title:'Heart Rate (BPM) / Temperature',
+        series:[
+          { label:'BPM', field:'bpm', color:'#991b1b', unit:' BPM', yAxisID:'y1', borderWidth:3, pointRadius:4 },
+          { label:'temperature', field:'cmdq_temp', color:'#1d4ed8', unit:' C', yAxisID:'y' }
+        ],
+        y:{ suggestedMin:25, suggestedMax:45, title:'Temperature (C)' },
+        y1:{ position:'right', suggestedMin:60, suggestedMax:200, title:'BPM' }
+      }
+    ];
+
+    function sampleCmdqPoints(points, target=1200){
+      if(points.length <= target) return points;
+      const bucketSize = Math.ceil(points.length / Math.max(1, Math.floor(target / 3)));
+      const sampled = [];
+      for(let i = 0; i < points.length; i += bucketSize){
+        const bucket = points.slice(i, i + bucketSize);
+        if(!bucket.length) continue;
+        let minPoint = bucket[0];
+        let maxPoint = bucket[0];
+        bucket.forEach(point => {
+          if(point.y < minPoint.y) minPoint = point;
+          if(point.y > maxPoint.y) maxPoint = point;
+        });
+        [bucket[0], minPoint, maxPoint, bucket[bucket.length - 1]].forEach(point => {
+          const prev = sampled[sampled.length - 1];
+          if(!prev || prev.x !== point.x || prev.y !== point.y) sampled.push(point);
+        });
+      }
+      return sampled.sort((a,b) => a.x - b.x);
+    }
+
+    function cmdqPointRadius(series, fullPointCount){
+      if(fullPointCount > 1500) return 0;
+      if(fullPointCount > 600) return series.pointRadius == null ? 1 : Math.min(series.pointRadius, 1);
+      return series.pointRadius == null ? 2 : series.pointRadius;
+    }
+
+    function formatCmdqStatValue(value, series, statName=''){
+      if(!Number.isFinite(value)) return '-';
+      if(series && series.boolean && (statName === 'min' || statName === 'max')){
+        return Number(value) === 1 ? 'TRUE' : 'FALSE';
+      }
+      const unit = series && series.unit ? series.unit : '';
+      const precision = unit === ' C' ? 1 : 2;
+      return `${fmtNumber(value, precision)}${unit}`;
+    }
+
+    function renderCmdqChartStats(rows, config){
+      const statRows = config.series.map(series => {
+        const values = rows.map(row => row[series.field]).filter(Number.isFinite);
+        if(!values.length){
+          return `<tr><td>${series.label}</td><td colspan="4">No data</td></tr>`;
+        }
+        const s = summarize(values);
+        return `
+          <tr>
+            <td>${series.label}</td>
+            <td>${formatCmdqStatValue(s.min, series, 'min')}</td>
+            <td>${formatCmdqStatValue(s.max, series, 'max')}</td>
+            <td>${formatCmdqStatValue(s.mean, series, 'mean')}</td>
+            <td>${formatCmdqStatValue(s.stdev, series, 'stdev')}</td>
+          </tr>`;
+      }).join('');
+      return `
+        <div class="chart-stats">
+          <table>
+            <thead><tr><th>Series</th><th>Min</th><th>Max</th><th>Mean</th><th>Stddev</th></tr></thead>
+            <tbody>${statRows}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderCmdqChart(canvas, rows, config){
+      const datasets = config.series.map(series => {
+        const points = rows
+          .filter(row => row.timestampMs != null && Number.isFinite(row[series.field]))
+          .map(row => ({ x: row.timestampMs, y: row[series.field] }));
+        const sampledPoints = sampleCmdqPoints(points, series.stepped ? 1800 : 1200);
+        const dense = points.length > sampledPoints.length;
+        const radius = cmdqPointRadius(series, points.length);
+        return {
+          label: series.label,
+          data: sampledPoints,
+          parsing: false,
+          borderColor: series.color,
+          backgroundColor: series.color,
+          borderWidth: dense ? Math.min(series.borderWidth || 2, 2) : (series.borderWidth || 2),
+          pointRadius: radius,
+          pointHoverRadius: Math.max(3, radius),
+          tension: 0,
+          stepped: !!series.stepped,
+          yAxisID: series.yAxisID || 'y',
+          spanGaps: false,
+          unit: series.unit || '',
+          boolean: !!series.boolean
+        };
+      });
+
+      const scales = {
+        x: { type:'time', title:{ display:true, text:'Time' } },
+        y: {
+          type:'linear',
+          min: config.y && Object.prototype.hasOwnProperty.call(config.y, 'min') ? config.y.min : undefined,
+          max: config.y && Object.prototype.hasOwnProperty.call(config.y, 'max') ? config.y.max : undefined,
+          suggestedMin: config.y ? config.y.suggestedMin : undefined,
+          suggestedMax: config.y ? config.y.suggestedMax : undefined,
+          ticks: config.y && config.y.boolean ? {
+            stepSize: config.y.stepSize || 1,
+            callback: value => Number(value) === 1 ? 'TRUE' : (Number(value) === 0 ? 'FALSE' : '')
+          } : undefined,
+          title:{ display:!!(config.y && config.y.title), text:(config.y && config.y.title) || '' }
+        }
+      };
+      if(config.y1){
+        scales.y1 = {
+          type:'linear',
+          position:config.y1.position || 'right',
+          suggestedMin:config.y1.suggestedMin,
+          suggestedMax:config.y1.suggestedMax,
+          grid:{ drawOnChartArea:false },
+          title:{ display:!!config.y1.title, text:config.y1.title || '' }
+        };
+      }
+
+      const chart = new Chart(canvas.getContext('2d'), {
+        type:'line',
+        data:{ datasets },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          interaction:{ mode:'nearest', intersect:false },
+          scales,
+          plugins:{
+            legend:{ display:true, position:'bottom' },
+            tooltip:{
+              callbacks:{
+                title:(items) => {
+                  const x = items[0]?.parsed?.x;
+                  return Number.isFinite(x) ? new Date(x).toLocaleString() : '';
+                },
+                label:(item) => {
+                  const unit = item.dataset.unit || '';
+                  if(item.dataset.boolean) return `${item.dataset.label}: ${Number(item.parsed.y) === 1 ? 'TRUE' : 'FALSE'}`;
+                  return `${item.dataset.label}: ${fmtNumber(item.parsed.y, unit === ' C' ? 1 : 2)}${unit}`;
+                }
+              }
+            }
+          }
+        }
+      });
+      cmdqChartRefs.push(chart);
+    }
+
+    function constrainCmdqTimeRange(changedHandle){
+      const startSlider = document.getElementById('cmdqTimeStartSlider');
+      const endSlider = document.getElementById('cmdqTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+      if(Number(startSlider.value) > Number(endSlider.value)){
+        if(changedHandle === 'start') endSlider.value = startSlider.value;
+        else startSlider.value = endSlider.value;
+      }
+    }
+
+    function updateCmdqTimeRangeVisual(){
+      const startSlider = document.getElementById('cmdqTimeStartSlider');
+      const endSlider = document.getElementById('cmdqTimeEndSlider');
+      const rangeSlider = document.getElementById('cmdqTimeRangeSlider');
+      if(!startSlider || !endSlider || !rangeSlider) return;
+      const max = Number(endSlider.max);
+      const startPercent = max > 0 ? (Number(startSlider.value) / max) * 100 : 0;
+      const endPercent = max > 0 ? (Number(endSlider.value) / max) * 100 : 100;
+      rangeSlider.style.setProperty('--range-start', `${startPercent}%`);
+      rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
+    }
+
+    function getCmdqVisibleRows(){
+      if(!cmdqViewState) return { rows: [], startIndex: 0, endIndex: 0, total: 0 };
+      const rows = cmdqViewState.rows || [];
+      const maxIndex = Math.max(0, rows.length - 1);
+      const startSlider = document.getElementById('cmdqTimeStartSlider');
+      const endSlider = document.getElementById('cmdqTimeEndSlider');
+      const startIndex = Math.max(0, Math.min(maxIndex, startSlider ? Number(startSlider.value) : 0));
+      const endIndex = Math.max(startIndex, Math.min(maxIndex, endSlider ? Number(endSlider.value) : maxIndex));
+      return { rows: rows.slice(startIndex, endIndex + 1), startIndex, endIndex, total: rows.length };
+    }
+
+    function updateCmdqSliderLabels(){
+      const visible = getCmdqVisibleRows();
+      const rows = visible.rows;
+      const startLabel = document.getElementById('cmdqTimeStartLabel');
+      const endLabel = document.getElementById('cmdqTimeEndLabel');
+      const currentLabel = document.getElementById('cmdqTimeCurrentLabel');
+      if(startLabel) startLabel.textContent = rows[0]?.timestamp_local || 'Unknown time';
+      if(endLabel) endLabel.textContent = rows[rows.length - 1]?.timestamp_local || 'Unknown time';
+      if(currentLabel) currentLabel.textContent = `${rows.length}/${visible.total} records`;
+      updateCmdqTimeRangeVisual();
+    }
+
+    function renderCmdqDashboardRows(rows){
+      const summary = document.getElementById('cmdqSummary');
+      const charts = document.getElementById('cmdqCharts');
+      const tableHolder = document.getElementById('cmdqTable');
+      if(!summary || !charts || !tableHolder) return;
+
+      destroyCmdqDashboard();
+      charts.innerHTML = '';
+      tableHolder.innerHTML = '';
+
+      if(!rows.length){
+        summary.innerHTML = '<em>No CMDQ records found for the selected time range.</em>';
+        return;
+      }
+
+      const successValues = rows.map(row => row.cmdq_success).filter(Number.isFinite);
+      const successCount = successValues.reduce((sum, value) => sum + (value ? 1 : 0), 0);
+      const successRate = successValues.length ? `${fmtNumber((successCount / successValues.length) * 100, 1)}%` : '-';
+      const averageBpm = averageNumeric(rows, 'bpm');
+      const averageTemp = averageNumeric(rows, 'cmdq_temp');
+      const averageHrv = averageNumeric(rows, 'cmdq_hrv');
+      const firstTs = rows.find(row => row.timestampMs != null);
+      const lastTs = rows.slice().reverse().find(row => row.timestampMs != null);
+
+      summary.innerHTML = [
+        renderMetricTile('CMDQ records', rows.length, firstTs && lastTs ? `${firstTs.timestamp_local} to ${lastTs.timestamp_local}` : ''),
+        renderMetricTile('CMDQ success', successValues.length ? `${successCount}/${successValues.length}` : '-', successRate),
+        renderMetricTile('Average BPM', averageBpm == null ? '-' : fmtNumber(averageBpm, 1)),
+        renderMetricTile('Average temperature', averageTemp == null ? '-' : `${fmtNumber(averageTemp, 1)} C`),
+        renderMetricTile('Average HRV', averageHrv == null ? '-' : fmtNumber(averageHrv, 2))
+      ].join('');
+
+      CMDQ_CHARTS.forEach((config, idx) => {
+        const panelEl = document.createElement('div');
+        panelEl.className = 'dashboard-panel';
+        const canvasId = `cmdqChart_${idx}_${config.id}`;
+        panelEl.innerHTML = `<h3>${config.title}</h3><div class="dashboard-chart"><canvas id="${canvasId}"></canvas></div>${renderCmdqChartStats(rows, config)}`;
+        charts.appendChild(panelEl);
+        const canvas = document.getElementById(canvasId);
+        if(canvas) renderCmdqChart(canvas, rows, config);
+      });
+
+      cmdqTableRef = new Tabulator('#cmdqTable', {
+        data: rows,
+        layout: 'fitColumns',
+        height: '360px',
+        pagination: 'local',
+        paginationSize: 100,
+        paginationSizeSelector: [50, 100, 250, 500],
+        columns: [
+          { title:'Timestamp (UTC)', field:'timestamp_utc', visible:false },
+          { title:'Timestamp (local)', field:'timestamp_local', minWidth:160 },
+          { title:'Source port', field:'source_port', sorter:'number', width:110 },
+          { title:'Success', field:'cmdq_success', sorter:'number', width:95 },
+          { title:'BPM', field:'bpm', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 1), width:90 },
+          { title:'Temp (C)', field:'cmdq_temp', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 1), width:105 },
+          { title:'RR median', field:'cmdq_rr_median', sorter:'number', width:110 },
+          { title:'RR modesum', field:'cmdq_rr_median_modesum', sorter:'number', width:120 },
+          { title:'HRV', field:'cmdq_hrv', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 2), width:90 },
+          { title:'Activity max', field:'cmdq_activity_max', sorter:'number', width:120 },
+          { title:'Activity avg', field:'cmdq_activity_average', sorter:'number', width:120 },
+          { title:'Active min last hour', field:'cmdq_active_min_in_last_hour', sorter:'number', width:160 },
+          { title:'Impedance', field:'cmdq_h_impedance', sorter:'number', width:110 }
+        ],
+        initialSort: [{ column:'timestamp_utc', dir:'asc' }]
+      });
+    }
+
+    function renderCmdqView(){
+      if(!cmdqViewState) return;
+      const visible = getCmdqVisibleRows();
+      updateCmdqSliderLabels();
+      renderCmdqDashboardRows(visible.rows);
+    }
+
+    function renderCmdqPanel(all, resetDateRange=false){
+      try{
+        const panel = document.getElementById('cmdqPanel');
+        const summary = document.getElementById('cmdqSummary');
+        const charts = document.getElementById('cmdqCharts');
+        const tableHolder = document.getElementById('cmdqTable');
+        const sliderWrapper = document.getElementById('cmdqTimeSliderWrapper');
+        if(!panel || !summary || !charts || !tableHolder) return;
+
+        destroyCmdqDashboard();
+        charts.innerHTML = '';
+        tableHolder.innerHTML = '';
+
+        const rows = collectCmdqRows(all);
+        const genBtn = document.getElementById('genCmdqBtn');
+        if(genBtn) genBtn.onclick = () => renderCmdqPanel(decodedOutput);
+
+        if(!rows.length){
+          cmdqViewState = null;
+          if(sliderWrapper) sliderWrapper.style.display = 'none';
+          summary.innerHTML = '<em>No CMDQ records found for the selected time range.</em>';
+          panel.style.display = 'block';
+          return;
+        }
+
+        cmdqViewState = { rows };
+        const startSlider = document.getElementById('cmdqTimeStartSlider');
+        const endSlider = document.getElementById('cmdqTimeEndSlider');
+        if(sliderWrapper) sliderWrapper.style.display = 'block';
+        if(startSlider && endSlider){
+          startSlider.min = endSlider.min = '0';
+          startSlider.max = endSlider.max = String(rows.length - 1);
+          startSlider.value = '0';
+          endSlider.value = endSlider.max;
+          startSlider.disabled = endSlider.disabled = rows.length <= 1;
+        }
+        renderCmdqView();
+        panel.style.display = 'block';
+      }catch(err){
+        console.error('renderCmdqPanel failed', err);
+      }
+    }
+
+    const cmdqCard = document.getElementById('cmdqCard');
+    if(cmdqCard){
+      cmdqCard.addEventListener('toggle', () => {
+        if(cmdqCard.open) setTimeout(() => cmdqChartRefs.forEach(chart => chart.resize()), 0);
+      });
     }
   </script>
 </body>
