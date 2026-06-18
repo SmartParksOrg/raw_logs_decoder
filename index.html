@@ -198,7 +198,7 @@
     }
     #dropArea.hover{ border-color: var(--brand); background: var(--drop-bg-hover); color: var(--text); }
 
-    #summaryPanel{ background: var(--panel); border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); margin-top:12px; padding:10px; }
+    #summaryPanel{ display:none; }
     #analyticsPanel{ background: var(--panel); border:1px solid rgba(255,255,255,.08); border-radius: var(--radius); }
 
     .tabulator{ background: var(--bg-elev); border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
@@ -257,7 +257,7 @@
     </details>
 
     <!-- === LOAD RAW LOG FILE SECTION === -->
-    <details class="card" open>
+    <details id="loadRawLogCard" class="card" open>
       <summary><span class="chev">▸</span> Load Raw Log file</summary>
       <div class="section-body">
         <div class="grid" style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px,1fr));">
@@ -280,12 +280,19 @@
         </div>
 
         <div id="progressWrapper" style="margin-top:12px;"><div id="progressBar">0%</div></div>
-        <div id="summaryPanel" style="display:none;"></div>
+      </div>
+    </details>
+
+    <!-- === DECODED MESSAGE SUMMARY SECTION === -->
+    <details id="decodedSummaryCard" class="card">
+      <summary><span class="chev">▸</span> Decoded message summary</summary>
+      <div class="section-body">
+        <div id="summaryPanel"></div>
       </div>
     </details>
 
     <!-- === EXPORT SECTION === -->
-    <details class="card" open>
+    <details class="card">
       <summary><span class="chev">▸</span> Export</summary>
       <div class="section-body">
         <button id="exportButton" class="btn secondary" style="display:none;" onclick="exportToJson()">Export JSON</button>
@@ -295,7 +302,7 @@
     </details>
 
     <!-- === ANALYTICS SECTION === -->
-    <details class="card" open>
+    <details class="card">
       <summary><span class="chev">▸</span> Simple Analytics (tables, charts & statistics)</summary>
       <div class="section-body">
         <div id="analyticsPanel">
@@ -407,7 +414,7 @@
     </details>
 
     <!-- === MAP SECTION === -->
-    <details class="card" open>
+    <details class="card">
       <summary><span class="chev">▸</span> Map</summary>
       <div class="section-body">
         <!-- Hidden (like analytics) until data is decoded -->
@@ -484,7 +491,7 @@
     </details>
 
     <!-- === BLE SCAN (PORT 29 -> 11) SECTION === -->
-    <details class="card" open>
+    <details class="card">
       <summary><span class="chev">▸</span> BLE Scan Results</summary>
       <div class="section-body">
         <div id="bleScanPanel" style="display:none;">
@@ -512,7 +519,7 @@
     </details>
 
     <!-- === LOG MESSAGES SECTION === -->
-    <details class="card" open>
+    <details class="card">
       <summary><span class="chev">▸</span> Log messages</summary>
       <div class="section-body">
         <p id="logTip" class="muted" style="margin-top:0; display:none;">Tip: click a row to toggle and view the full message content.</p>
@@ -670,6 +677,12 @@
     const customDecoderInput = document.getElementById("customDecoder");
     const decoderSelect = document.getElementById("decoderSelect");
 
+    function openOnlyCard(cardId){
+      document.querySelectorAll('details.card').forEach(card => {
+        card.open = card.id === cardId;
+      });
+    }
+
     function loadDecoder(callback){
       clearError();
       const existing = document.getElementById("decoderScript");
@@ -739,6 +752,7 @@
         renderMessageSummary(decodedOutput);
         renderBundledSummary(decodedOutput);
         renderBleScanPanel(decodedOutput, true);
+        openOnlyCard("decodedSummaryCard");
         prepareAnalytics();
         return;
       }
@@ -777,10 +791,13 @@
       decodedOutput = []; base64Blocks = [];
       decodeBtn.disabled = true;
       updateProgress(0, 1);
+      openOnlyCard("loadRawLogCard");
       document.getElementById("exportButton").style.display = "none";
       document.getElementById("exportCsvButton").style.display = "none";
       document.getElementById("exportXlsButton").style.display = "none";
       document.getElementById("progressWrapper").style.display = "block";
+      const summaryPanel = document.getElementById("summaryPanel");
+      if (summaryPanel) { summaryPanel.innerHTML = ""; summaryPanel.style.display = "none"; }
       document.getElementById("output").innerHTML = "";
       document.getElementById("analyticsPanel").style.display = "none";
       document.getElementById("mapPanel").style.display = "none"; // also hide Map until data ready
@@ -2269,7 +2286,6 @@
           return { port, type: typ, count: c };
         });
         const html = `
-          <h3 style="margin:0 0 6px;">Decoded message summary</h3>
           <div style="font-size:12px;color:#a8b3c3;margin-bottom:8px;">Total messages: ${total} • Unique ports: ${rows.length}</div>
           <table class="summary-table">
             <thead><tr><th>Port</th><th>Message type</th><th>Messages</th></tr></thead>
