@@ -259,6 +259,28 @@
       letter-spacing: 0;
     }
     .dashboard-chart{ height: 300px; position:relative; }
+    .chart-loading{
+      position:absolute;
+      inset:0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      gap:10px;
+      color:var(--muted);
+      background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.015));
+      border-radius:8px;
+      z-index:2;
+    }
+    .chart-loading .spinner{
+      width:24px;
+      height:24px;
+      border-width:3px;
+    }
+    .chart-loading-label{
+      font-size:12px;
+      font-weight:600;
+    }
     .chart-stats{ margin-top:10px; overflow-x:auto; }
     .chart-stats table{ width:100%; border-collapse:collapse; font-size:12px; }
     .chart-stats th, .chart-stats td{ padding:4px 6px; border-top:1px solid rgba(255,255,255,.08); text-align:right; white-space:nowrap; }
@@ -1527,6 +1549,8 @@
     let cmdqChartRefs = [];
     let cmdqViewState = null;
     let cmdqActiveTab = 'overview';
+    let cmdqRenderToken = 0;
+    let cmdqRenderTimer = null;
 
     // Outlier auto-range flags
     let needRecalcX = true, needRecalcY = true;
@@ -1546,6 +1570,11 @@
       mapViewState = null;
       cmdqViewState = null;
       cmdqActiveTab = 'overview';
+      cmdqRenderToken++;
+      if(cmdqRenderTimer != null){
+        clearTimeout(cmdqRenderTimer);
+        cmdqRenderTimer = null;
+      }
       updateCmdqTabs();
       needRecalcX = true;
       needRecalcY = true;
@@ -2960,6 +2989,11 @@
     }
 
     function destroyCmdqDashboard(){
+      cmdqRenderToken++;
+      if(cmdqRenderTimer != null){
+        clearTimeout(cmdqRenderTimer);
+        cmdqRenderTimer = null;
+      }
       cmdqChartRefs.forEach(chart => { try { chart.destroy(); } catch(e){} });
       cmdqChartRefs = [];
       if(cmdqTableRef){ try { cmdqTableRef.destroy(); } catch(e){} cmdqTableRef = null; }
@@ -3161,6 +3195,70 @@
         </div>`;
     }
 
+    function renderCmdqChartShell(charts, config, idx){
+      const panelEl = document.createElement('div');
+      panelEl.className = 'dashboard-panel';
+      const canvasId = `cmdqChart_${idx}_${config.id}`;
+      const loadingId = `cmdqChartLoading_${idx}_${config.id}`;
+      const statsId = `cmdqChartStats_${idx}_${config.id}`;
+      panelEl.innerHTML = `
+        <h3>${config.title}</h3>
+        <div class="dashboard-chart">
+          <div id="${loadingId}" class="chart-loading" aria-live="polite">
+            <div class="spinner" aria-hidden="true"></div>
+            <div class="chart-loading-label">Loading graph...</div>
+          </div>
+          <canvas id="${canvasId}" style="opacity:0;"></canvas>
+        </div>
+        <div id="${statsId}" class="chart-stats"><em>Preparing statistics...</em></div>`;
+      charts.appendChild(panelEl);
+      return { config, canvasId, loadingId, statsId };
+    }
+
+    function renderQueuedCmdqCharts(tasks, rows, token){
+      let index = 0;
+      const renderNext = () => {
+        if(token !== cmdqRenderToken) return;
+        const task = tasks[index++];
+        if(!task){
+          cmdqRenderTimer = null;
+          return;
+        }
+
+        const loadingEl = document.getElementById(task.loadingId);
+        const statsEl = document.getElementById(task.statsId);
+        const canvas = document.getElementById(task.canvasId);
+        try{
+          if(loadingEl){
+            const label = loadingEl.querySelector('.chart-loading-label');
+            if(label) label.textContent = 'Rendering graph...';
+          }
+          if(statsEl) statsEl.outerHTML = renderCmdqChartStats(rows, task.config);
+          if(canvas){
+            renderCmdqChart(canvas, rows, task.config);
+            canvas.style.opacity = '1';
+          }
+          if(loadingEl) loadingEl.style.display = 'none';
+        }catch(err){
+          console.error('renderQueuedCmdqCharts failed', err);
+          if(loadingEl){
+            loadingEl.innerHTML = '<div class="chart-loading-label">Graph failed to render</div>';
+          }
+        }
+
+        if(index < tasks.length) {
+          cmdqRenderTimer = setTimeout(renderNext, 0);
+        } else {
+          cmdqRenderTimer = null;
+        }
+      };
+
+      afterNextPaint(() => {
+        if(token !== cmdqRenderToken) return;
+        cmdqRenderTimer = setTimeout(renderNext, 0);
+      });
+    }
+
     function renderCmdqChart(canvas, rows, config){
       const datasets = config.series.map(series => {
         const points = rows
@@ -3325,15 +3423,9 @@
       charts.classList.toggle('full-width', activeCharts.length <= 1);
       tableHolder.style.display = showRawTable ? 'block' : 'none';
 
-      activeCharts.forEach((config, idx) => {
-        const panelEl = document.createElement('div');
-        panelEl.className = 'dashboard-panel';
-        const canvasId = `cmdqChart_${idx}_${config.id}`;
-        panelEl.innerHTML = `<h3>${config.title}</h3><div class="dashboard-chart"><canvas id="${canvasId}"></canvas></div>${renderCmdqChartStats(rows, config)}`;
-        charts.appendChild(panelEl);
-        const canvas = document.getElementById(canvasId);
-        if(canvas) renderCmdqChart(canvas, rows, config);
-      });
+      const renderToken = cmdqRenderToken;
+      const chartTasks = activeCharts.map((config, idx) => renderCmdqChartShell(charts, config, idx));
+      if(chartTasks.length) renderQueuedCmdqCharts(chartTasks, rows, renderToken);
 
       if(!showRawTable) return;
 
