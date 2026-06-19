@@ -64,6 +64,95 @@
     #mapTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
+    .map-tools-control{
+      background:color-mix(in oklab, var(--panel) 94%, transparent);
+      color:var(--text);
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:8px;
+      box-shadow:var(--shadow);
+      padding:7px;
+      min-width:138px;
+      backdrop-filter:blur(6px);
+    }
+    .map-tools-title{
+      font-size:10px;
+      font-weight:700;
+      margin:0 0 5px;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .map-tools-actions{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:5px;
+      margin-bottom:7px;
+    }
+    .map-tool-button{
+      appearance:none;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:6px;
+      padding:5px 6px;
+      cursor:pointer;
+      font-size:11px;
+      font-weight:700;
+      margin:0;
+      color:var(--text);
+      box-shadow:none;
+    }
+    .map-tool-button.fullscreen{
+      background:color-mix(in oklab, var(--brand) 22%, var(--bg-elev));
+      border-color:color-mix(in oklab, var(--brand) 48%, rgba(255,255,255,.12));
+    }
+    .map-tool-button.png{
+      background:color-mix(in oklab, var(--brand-2) 22%, var(--bg-elev));
+      border-color:color-mix(in oklab, var(--brand-2) 48%, rgba(255,255,255,.12));
+    }
+    .map-tool-button:disabled{
+      opacity:.45;
+      cursor:not-allowed;
+      box-shadow:none;
+    }
+    .map-layer-heading{
+      font-size:10px;
+      color:var(--muted);
+      margin:0 0 4px;
+    }
+    .map-layer-list{
+      display:grid;
+      gap:4px;
+    }
+    .map-layer-chip{
+      appearance:none;
+      color:var(--text);
+      font-size:11px;
+      margin:0;
+      display:flex;
+      align-items:center;
+      gap:6px;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:6px;
+      padding:5px 6px;
+      background:var(--bg-elev);
+      cursor:pointer;
+      user-select:none;
+      width:100%;
+      text-align:left;
+    }
+    .map-layer-chip.active{
+      border-color:color-mix(in oklab, var(--brand) 52%, rgba(255,255,255,.12));
+      background:color-mix(in oklab, var(--brand) 16%, var(--bg-elev));
+    }
+    .map-layer-swatch{
+      width:8px;
+      height:8px;
+      border-radius:999px;
+      background:var(--brand);
+      flex:0 0 auto;
+    }
+    .map-layer-swatch.track{ background:#cc3333; }
+    .map-layer-swatch.heatmap{ background:#f59e0b; }
+    .map-layer-swatch.warnings{ background:#dc2626; }
     #mapWrapper:fullscreen{
       background:var(--bg);
       padding:12px;
@@ -609,14 +698,6 @@
               <label>Coordinate filter</label>
               <label><input type="checkbox" id="ignoreZeroCoords" checked> Ignore lat=0 or lon=0</label>
             </div>
-            <div class="control" id="mapLayerWrapper">
-              <label>Visible layers</label>
-              <label><input type="checkbox" id="mapPointsToggle" checked> Points</label>
-              <label><input type="checkbox" id="trackToggle" checked> Track line</label>
-              <label><input type="checkbox" id="mapHeatmapToggle" checked> Heatmap grid</label>
-              <label><input type="checkbox" id="mapWarningsToggle" checked> Speed warnings</label>
-            </div>
-
             <div class="control">
               <label class="muted">&nbsp;</label>
               <button id="genMapBtn" class="btn">Generate Map</button>
@@ -624,14 +705,6 @@
             <div class="control">
               <label class="muted">&nbsp;</label>
               <button id="downloadMapBtn" class="btn secondary">Download Map CSV</button>
-            </div>
-            <div class="control">
-              <label class="muted">&nbsp;</label>
-              <button id="downloadMapPngBtn" class="btn secondary">Download Map PNG</button>
-            </div>
-            <div class="control">
-              <label class="muted">&nbsp;</label>
-              <button id="fullscreenMapBtn" class="btn secondary">Open Map Full Screen</button>
             </div>
           </div>
 
@@ -1638,13 +1711,6 @@
         };
         slider.onchange = () => renderAccelerometerView();
       });
-      ['mapPointsToggle','trackToggle','mapHeatmapToggle','mapWarningsToggle'].forEach(id => {
-        const checkbox = document.getElementById(id);
-        if(!checkbox) return;
-        checkbox.onchange = () => {
-          if(mapViewState) renderMapView(false);
-        };
-      });
       ['startTime','endTime','mapStartTime','mapEndTime','bleStartTime','bleEndTime'].forEach((id) => {
         const input = document.getElementById(id);
         if(input) input.addEventListener('input', () => { input.dataset.userEdited = 'true'; });
@@ -1670,6 +1736,8 @@
     let mapChartRefs = [];
     let mapViewState = null;
     let mapActiveTab = 'track';
+    let mapLayerPrefs = { points:true, track:true, heatmap:true, warnings:true };
+    let mapToolsContent = null;
     let bleScanTableRef = null;
     let bleScanChartRef = null;
     let accelerometerTableRef = null;
@@ -1702,6 +1770,7 @@
       analyticsCache = null;
       mapViewState = null;
       mapActiveTab = 'track';
+      mapLayerPrefs = { points:true, track:true, heatmap:true, warnings:true };
       updateMapTabs();
       accelerometerViewState = null;
       cmdqViewState = null;
@@ -2534,6 +2603,7 @@
       mapActiveTab = tab;
       updateMapTabs();
       if(mapViewState) renderMapView(false);
+      else if(mapRef) syncMapLayerControlForActiveTab();
     }
 
     function initMapTabs(){
@@ -2559,12 +2629,13 @@
 
     function updateMapActionButtons(){
       const hasMap = hasVisibleMap();
-      const fullscreenButton = document.getElementById('fullscreenMapBtn');
+      const fullscreenButton = document.getElementById('mapToolFullscreenBtn');
       if(fullscreenButton){
-        fullscreenButton.textContent = isMapFullscreen() ? 'Exit Full Screen' : 'Open Map Full Screen';
+        fullscreenButton.textContent = isMapFullscreen() ? 'Exit' : 'Full';
+        fullscreenButton.title = isMapFullscreen() ? 'Exit full screen' : 'Open map full screen';
         fullscreenButton.disabled = !hasMap;
       }
-      const pngButton = document.getElementById('downloadMapPngBtn');
+      const pngButton = document.getElementById('mapToolPngBtn');
       if(pngButton) pngButton.disabled = !hasMap;
     }
 
@@ -2597,15 +2668,64 @@
     }
 
     function initMapFullscreen(){
-      const button = document.getElementById('fullscreenMapBtn');
-      if(button) button.onclick = toggleMapFullscreen;
-      const pngButton = document.getElementById('downloadMapPngBtn');
-      if(pngButton) pngButton.onclick = downloadMapScreenshot;
       ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(eventName => {
         document.addEventListener(eventName, () => {
           updateMapActionButtons();
           resizeMapSoon();
         });
+      });
+      updateMapActionButtons();
+    }
+
+    function getRelevantMapLayerDefs(){
+      const defs = {
+        points: { key:'points', label:'Points', layer:mapPointsLayer },
+        track: { key:'track', label:'Track line', layer:mapTrackLayer },
+        heatmap: { key:'heatmap', label:'Heatmap grid', layer:mapHeatLayer },
+        warnings: { key:'warnings', label:'Speed warnings', layer:mapWarningLayer }
+      };
+      const byTab = {
+        track: ['points', 'track'],
+        space: ['points', 'heatmap'],
+        movement: ['points', 'track'],
+        quality: ['points', 'track', 'warnings']
+      };
+      return (byTab[mapActiveTab] || byTab.track).map(key => defs[key]).filter(def => def.layer);
+    }
+
+    function renderMapToolsControl(){
+      if(!mapToolsContent) return;
+      const tabLabel = {
+        track:'Track',
+        space:'Space Use',
+        movement:'Movement',
+        quality:'Quality'
+      }[mapActiveTab] || 'Map';
+      const layerRows = getRelevantMapLayerDefs().map(def => `
+        <button type="button" class="map-layer-chip ${mapLayerPrefs[def.key] ? 'active' : ''}" data-map-layer="${def.key}" aria-pressed="${mapLayerPrefs[def.key] ? 'true' : 'false'}">
+          <span class="map-layer-swatch ${def.key}"></span>
+          <span>${def.label}</span>
+        </button>`).join('');
+      mapToolsContent.innerHTML = `
+        <div class="map-tools-title">${tabLabel}</div>
+        <div class="map-tools-actions">
+          <button type="button" id="mapToolFullscreenBtn" class="map-tool-button fullscreen" title="Open map full screen">Full</button>
+          <button type="button" id="mapToolPngBtn" class="map-tool-button png" title="Download map PNG">PNG</button>
+        </div>
+        <div class="map-layer-heading">Visible layers</div>
+        <div class="map-layer-list">${layerRows}</div>`;
+
+      const fullscreenButton = mapToolsContent.querySelector('#mapToolFullscreenBtn');
+      if(fullscreenButton) fullscreenButton.onclick = toggleMapFullscreen;
+      const pngButton = mapToolsContent.querySelector('#mapToolPngBtn');
+      if(pngButton) pngButton.onclick = downloadMapScreenshot;
+      mapToolsContent.querySelectorAll('[data-map-layer]').forEach(button => {
+        button.onclick = () => {
+          const key = button.dataset.mapLayer;
+          mapLayerPrefs[key] = !mapLayerPrefs[key];
+          if(mapViewState) renderMapView(false);
+          else syncMapLayerControlForActiveTab();
+        };
       });
       updateMapActionButtons();
     }
@@ -2618,16 +2738,29 @@
     }
 
     function getMapLayerVisibility(){
-      const checked = (id, defaultValue=true) => {
-        const el = document.getElementById(id);
-        return el ? el.checked : defaultValue;
-      };
       return {
-        points: checked('mapPointsToggle'),
-        track: checked('trackToggle'),
-        heatmap: checked('mapHeatmapToggle'),
-        warnings: checked('mapWarningsToggle')
+        points: !mapRef || !mapPointsLayer || mapRef.hasLayer(mapPointsLayer),
+        track: !mapRef || !mapTrackLayer || mapRef.hasLayer(mapTrackLayer),
+        heatmap: !mapRef || !mapHeatLayer || mapRef.hasLayer(mapHeatLayer),
+        warnings: !mapRef || !mapWarningLayer || mapRef.hasLayer(mapWarningLayer)
       };
+    }
+
+    function syncMapLayerControlForActiveTab(){
+      if(!mapRef) return;
+      const relevantKeys = new Set(getRelevantMapLayerDefs().map(def => def.key));
+      const allDefs = [
+        { key:'points', layer:mapPointsLayer },
+        { key:'track', layer:mapTrackLayer },
+        { key:'heatmap', layer:mapHeatLayer },
+        { key:'warnings', layer:mapWarningLayer }
+      ].filter(def => def.layer);
+      allDefs.forEach(def => {
+        const shouldShow = relevantKeys.has(def.key) && mapLayerPrefs[def.key];
+        if(shouldShow && !mapRef.hasLayer(def.layer)) mapRef.addLayer(def.layer);
+        if(!shouldShow && mapRef.hasLayer(def.layer)) mapRef.removeLayer(def.layer);
+      });
+      renderMapToolsControl();
     }
 
     function findMapCoordinateField(fields, aliases, suffixPattern){
@@ -2730,7 +2863,7 @@
         return;
       }
 
-      const button = document.getElementById('downloadMapPngBtn');
+      const button = document.getElementById('mapToolPngBtn');
       if(button) button.disabled = true;
       setRenderingBusy(true, 'Preparing map screenshot', 'Capturing the current map view as PNG...');
       try{
@@ -2783,6 +2916,16 @@
       mapTrackLayer = L.layerGroup().addTo(mapRef);
       mapHeatLayer = L.layerGroup().addTo(mapRef);
       mapWarningLayer = L.layerGroup().addTo(mapRef);
+      const toolsControl = L.control({ position:'topright' });
+      toolsControl.onAdd = () => {
+        const container = L.DomUtil.create('div', 'map-tools-control');
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+        mapToolsContent = container;
+        renderMapToolsControl();
+        return container;
+      };
+      toolsControl.addTo(mapRef);
     }
 
     function renderMapStats(points, totalLocationMessages, zeroCoordinateCount){
@@ -3397,6 +3540,7 @@
 
       updateMapSliderLabels();
       ensureMapInitialized();
+      syncMapLayerControlForActiveTab();
       destroyMapCharts();
       mapPointsLayer.clearLayers();
       mapTrackLayer.clearLayers();
