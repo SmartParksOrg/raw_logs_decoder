@@ -1,14 +1,99 @@
 name: Sync App Version
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "index.html"
+      - "app-ui.js"
+      - "field-meta.json"
+      - "ttn_decoder-v*.js"
+      - "favicon.ico"
+      - ".github/workflows/sync-version.yml"
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  update-version:
+  bump-version-on-app-change:
+    if: github.event_name != 'release' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - name: Ensure latest default branch
+        run: |
+          set -euo pipefail
+          BRANCH='${{ github.event.repository.default_branch }}'
+          git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git pull --ff-only origin "$BRANCH"
+
+      - name: Bump app version
+        id: bump
+        run: |
+          set -euo pipefail
+          CURRENT="$(tr -d '[:space:]' < version.txt)"
+          if ! printf '%s\n' "$CURRENT" | grep -Eq '^v[0-9]+(\.[0-9]+)+$'; then
+            echo "version.txt must contain a version like v1.17; got '$CURRENT'." >&2
+            exit 1
+          fi
+          PREFIX="${CURRENT%.*}"
+          LAST="${CURRENT##*.}"
+          NEXT="${PREFIX}.$((LAST + 1))"
+          echo "$NEXT" > version.txt
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        id: commit
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- version.txt; then
+            echo "No version update required."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          VERSION='${{ steps.bump.outputs.version }}'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version.txt
+          git commit -m "chore: bump app version to $VERSION"
+          echo "committed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push version bump
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.commit.outputs.committed }}" != "true" ]; then
+            echo "No updates to push."
+            exit 0
+          fi
+          BRANCH='${{ github.event.repository.default_branch }}'
+          git push origin "HEAD:$BRANCH"
+
+      - name: Tag bumped version
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          TAG_NAME: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          if git rev-parse "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag $TAG_NAME already exists; leaving it unchanged."
+            exit 0
+          fi
+          git tag "$TAG_NAME"
+          git push origin "$TAG_NAME"
+
+  sync-version-from-release:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
