@@ -153,6 +153,62 @@
     .map-layer-swatch.track{ background:#cc3333; }
     .map-layer-swatch.heatmap{ background:#f59e0b; }
     .map-layer-swatch.warnings{ background:#dc2626; }
+    .map-fullscreen-time-control{
+      display:none;
+      position:absolute;
+      left:50%;
+      bottom:18px;
+      transform:translateX(-50%);
+      z-index:1000;
+      background:rgba(255,255,255,.96);
+      color:#16202c;
+      border:1px solid rgba(17,24,39,.14);
+      border-radius:8px;
+      box-shadow:0 8px 22px rgba(17,24,39,.18);
+      padding:8px 10px;
+      min-width:min(620px, calc(100vw - 36px));
+      backdrop-filter:blur(6px);
+    }
+    #mapWrapper:fullscreen .map-fullscreen-time-control,
+    #mapWrapper:-webkit-full-screen .map-fullscreen-time-control{
+      display:block;
+    }
+    .map-fullscreen-time-title{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin:0 0 4px;
+      font-size:10px;
+      color:#5b6678;
+      text-transform:uppercase;
+      font-weight:700;
+      letter-spacing:.04em;
+    }
+    .map-fullscreen-time-labels{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      margin-top:4px;
+      color:#5b6678;
+      font-size:11px;
+      white-space:nowrap;
+    }
+    .map-fullscreen-time-labels strong{
+      color:#16202c;
+    }
+    @media (max-width: 680px){
+      .map-fullscreen-time-control{
+        left:12px;
+        right:12px;
+        bottom:12px;
+        transform:none;
+        min-width:0;
+      }
+      .map-fullscreen-time-labels{
+        font-size:10px;
+      }
+    }
     #mapWrapper:fullscreen{
       background:var(--bg);
       padding:12px;
@@ -721,6 +777,21 @@
           <!-- Hidden until we have valid data -->
           <div id="mapWrapper" class="visual-wrapper" style="display:none;">
             <div id="map"></div>
+            <div id="mapFullscreenTimeControl" class="map-fullscreen-time-control">
+              <div class="map-fullscreen-time-title">
+                <span>Time range</span>
+                <strong id="mapFullscreenTimeCurrentLabel"></strong>
+              </div>
+              <div class="dual-range" id="mapFullscreenTimeRangeSlider">
+                <div class="dual-range-track"></div>
+                <input id="mapFullscreenTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map start time" />
+                <input id="mapFullscreenTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map end time" />
+              </div>
+              <div class="map-fullscreen-time-labels">
+                <span id="mapFullscreenTimeStartLabel"></span>
+                <span id="mapFullscreenTimeEndLabel"></span>
+              </div>
+            </div>
           </div>
 
           <div id="mapTimeSliderWrapper" style="display:none;">
@@ -1892,6 +1963,15 @@
         };
         slider.onchange = () => renderMapView(false);
       });
+      ['mapFullscreenTimeStartSlider','mapFullscreenTimeEndSlider'].forEach(id => {
+        const slider = document.getElementById(id);
+        if(!slider) return;
+        slider.oninput = () => {
+          syncMapTimeSlidersFromFullscreen(id === 'mapFullscreenTimeStartSlider' ? 'start' : 'end');
+          updateMapSliderLabels();
+        };
+        slider.onchange = () => renderMapView(false);
+      });
 
       // Recalculate ranges when fields or row-level filters change.
       if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
@@ -2671,6 +2751,7 @@
       ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(eventName => {
         document.addEventListener(eventName, () => {
           updateMapActionButtons();
+          updateMapSliderLabels();
           resizeMapSoon();
         });
       });
@@ -3491,6 +3572,38 @@
       }
     }
 
+    function syncMapFullscreenSlidersFromMain(){
+      const mainStart = document.getElementById('mapTimeStartSlider');
+      const mainEnd = document.getElementById('mapTimeEndSlider');
+      const fsStart = document.getElementById('mapFullscreenTimeStartSlider');
+      const fsEnd = document.getElementById('mapFullscreenTimeEndSlider');
+      if(!mainStart || !mainEnd || !fsStart || !fsEnd) return;
+      fsStart.min = mainStart.min;
+      fsStart.max = mainStart.max;
+      fsStart.value = mainStart.value;
+      fsStart.disabled = mainStart.disabled;
+      fsEnd.min = mainEnd.min;
+      fsEnd.max = mainEnd.max;
+      fsEnd.value = mainEnd.value;
+      fsEnd.disabled = mainEnd.disabled;
+    }
+
+    function syncMapTimeSlidersFromFullscreen(changedHandle){
+      const mainStart = document.getElementById('mapTimeStartSlider');
+      const mainEnd = document.getElementById('mapTimeEndSlider');
+      const fsStart = document.getElementById('mapFullscreenTimeStartSlider');
+      const fsEnd = document.getElementById('mapFullscreenTimeEndSlider');
+      if(!mainStart || !mainEnd || !fsStart || !fsEnd) return;
+      if(Number(fsStart.value) > Number(fsEnd.value)){
+        if(changedHandle === 'start') fsEnd.value = fsStart.value;
+        else fsStart.value = fsEnd.value;
+      }
+      mainStart.value = fsStart.value;
+      mainEnd.value = fsEnd.value;
+      constrainMapTimeRange(changedHandle);
+      syncMapFullscreenSlidersFromMain();
+    }
+
     function updateMapTimeRangeVisual(){
       const startSlider = document.getElementById('mapTimeStartSlider');
       const endSlider = document.getElementById('mapTimeEndSlider');
@@ -3501,6 +3614,11 @@
       const endPercent = max > 0 ? (Number(endSlider.value) / max) * 100 : 100;
       rangeSlider.style.setProperty('--range-start', `${startPercent}%`);
       rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
+      const fsRangeSlider = document.getElementById('mapFullscreenTimeRangeSlider');
+      if(fsRangeSlider){
+        fsRangeSlider.style.setProperty('--range-start', `${startPercent}%`);
+        fsRangeSlider.style.setProperty('--range-end', `${endPercent}%`);
+      }
     }
 
     function getMapVisiblePoints(){
@@ -3523,11 +3641,18 @@
       const startLabel = document.getElementById('mapTimeStartLabel');
       const endLabel = document.getElementById('mapTimeEndLabel');
       const currentLabel = document.getElementById('mapTimeCurrentLabel');
+      const fsStartLabel = document.getElementById('mapFullscreenTimeStartLabel');
+      const fsEndLabel = document.getElementById('mapFullscreenTimeEndLabel');
+      const fsCurrentLabel = document.getElementById('mapFullscreenTimeCurrentLabel');
       if(startLabel) startLabel.textContent = visiblePoints[0]?.tsLabel || 'Unknown time';
       if(endLabel) endLabel.textContent = latestPoint?.tsLabel || 'Unknown time';
       if(currentLabel){
         currentLabel.textContent = `${visiblePoints.length}/${visible.total} points`;
       }
+      if(fsStartLabel) fsStartLabel.textContent = visiblePoints[0]?.tsLabel || 'Unknown time';
+      if(fsEndLabel) fsEndLabel.textContent = latestPoint?.tsLabel || 'Unknown time';
+      if(fsCurrentLabel) fsCurrentLabel.textContent = `${visiblePoints.length}/${visible.total} points`;
+      syncMapFullscreenSlidersFromMain();
       updateMapTimeRangeVisual();
     }
 
