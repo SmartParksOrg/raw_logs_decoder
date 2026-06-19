@@ -609,9 +609,12 @@
               <label>Coordinate filter</label>
               <label><input type="checkbox" id="ignoreZeroCoords" checked> Ignore lat=0 or lon=0</label>
             </div>
-            <div class="control" id="trackWrapper">
-              <label>Track</label>
-              <label><input type="checkbox" id="trackToggle"> Draw line between points</label>
+            <div class="control" id="mapLayerWrapper">
+              <label>Visible layers</label>
+              <label><input type="checkbox" id="mapPointsToggle" checked> Points</label>
+              <label><input type="checkbox" id="trackToggle" checked> Track line</label>
+              <label><input type="checkbox" id="mapHeatmapToggle" checked> Heatmap grid</label>
+              <label><input type="checkbox" id="mapWarningsToggle" checked> Speed warnings</label>
             </div>
 
             <div class="control">
@@ -621,6 +624,10 @@
             <div class="control">
               <label class="muted">&nbsp;</label>
               <button id="downloadMapBtn" class="btn secondary">Download Map CSV</button>
+            </div>
+            <div class="control">
+              <label class="muted">&nbsp;</label>
+              <button id="downloadMapPngBtn" class="btn secondary">Download Map PNG</button>
             </div>
             <div class="control">
               <label class="muted">&nbsp;</label>
@@ -786,6 +793,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./app-ui.js"></script>
 
@@ -1630,6 +1638,13 @@
         };
         slider.onchange = () => renderAccelerometerView();
       });
+      ['mapPointsToggle','trackToggle','mapHeatmapToggle','mapWarningsToggle'].forEach(id => {
+        const checkbox = document.getElementById(id);
+        if(!checkbox) return;
+        checkbox.onchange = () => {
+          if(mapViewState) renderMapView(false);
+        };
+      });
       ['startTime','endTime','mapStartTime','mapEndTime','bleStartTime','bleEndTime'].forEach((id) => {
         const input = document.getElementById(id);
         if(input) input.addEventListener('input', () => { input.dataset.userEdited = 'true'; });
@@ -1649,6 +1664,7 @@
     let mapPointsLayer = null;
     let mapTrackLayer = null;
     let mapHeatLayer = null;
+    let mapWarningLayer = null;
     let mapCanvasRenderer = null;
     let mapTableRef = null;
     let mapChartRefs = [];
@@ -1682,6 +1698,7 @@
       destroyCmdqDashboard();
       if(mapPointsLayer) mapPointsLayer.clearLayers();
       if(mapTrackLayer) mapTrackLayer.clearLayers();
+      if(mapWarningLayer) mapWarningLayer.clearLayers();
       analyticsCache = null;
       mapViewState = null;
       mapActiveTab = 'track';
@@ -2535,11 +2552,20 @@
       return getFullscreenElement() === document.getElementById('mapWrapper');
     }
 
-    function updateMapFullscreenButton(){
-      const button = document.getElementById('fullscreenMapBtn');
-      if(!button) return;
-      button.textContent = isMapFullscreen() ? 'Exit Full Screen' : 'Open Map Full Screen';
-      button.disabled = !document.getElementById('mapWrapper') || document.getElementById('mapWrapper').style.display === 'none';
+    function hasVisibleMap(){
+      const wrapper = document.getElementById('mapWrapper');
+      return !!wrapper && wrapper.style.display !== 'none';
+    }
+
+    function updateMapActionButtons(){
+      const hasMap = hasVisibleMap();
+      const fullscreenButton = document.getElementById('fullscreenMapBtn');
+      if(fullscreenButton){
+        fullscreenButton.textContent = isMapFullscreen() ? 'Exit Full Screen' : 'Open Map Full Screen';
+        fullscreenButton.disabled = !hasMap;
+      }
+      const pngButton = document.getElementById('downloadMapPngBtn');
+      if(pngButton) pngButton.disabled = !hasMap;
     }
 
     function resizeMapSoon(){
@@ -2573,13 +2599,15 @@
     function initMapFullscreen(){
       const button = document.getElementById('fullscreenMapBtn');
       if(button) button.onclick = toggleMapFullscreen;
+      const pngButton = document.getElementById('downloadMapPngBtn');
+      if(pngButton) pngButton.onclick = downloadMapScreenshot;
       ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(eventName => {
         document.addEventListener(eventName, () => {
-          updateMapFullscreenButton();
+          updateMapActionButtons();
           resizeMapSoon();
         });
       });
-      updateMapFullscreenButton();
+      updateMapActionButtons();
     }
 
     function destroyMapCharts(){
@@ -2587,6 +2615,19 @@
       mapChartRefs = [];
       const charts = document.getElementById('mapCharts');
       if(charts) charts.innerHTML = '';
+    }
+
+    function getMapLayerVisibility(){
+      const checked = (id, defaultValue=true) => {
+        const el = document.getElementById(id);
+        return el ? el.checked : defaultValue;
+      };
+      return {
+        points: checked('mapPointsToggle'),
+        track: checked('trackToggle'),
+        heatmap: checked('mapHeatmapToggle'),
+        warnings: checked('mapWarningsToggle')
+      };
     }
 
     function findMapCoordinateField(fields, aliases, suffixPattern){
@@ -2673,6 +2714,53 @@
     }
     function downloadMapCSV(){ if (mapTableRef) { mapTableRef.download('csv', (logFileName || 'decoded') + '_map.csv'); } else { showError('No map data to download yet. Generate the map first.'); } }
 
+    function waitForNextPaint(){
+      return new Promise(resolve => afterNextPaint(resolve));
+    }
+
+    async function downloadMapScreenshot(){
+      const mapEl = document.getElementById('map');
+      const wrapper = document.getElementById('mapWrapper');
+      if(!mapEl || !wrapper || wrapper.style.display === 'none'){
+        showError('Generate the map before downloading a screenshot.');
+        return;
+      }
+      if(typeof html2canvas !== 'function'){
+        showError('Map screenshot library is not available. Check your internet connection and reload the app.');
+        return;
+      }
+
+      const button = document.getElementById('downloadMapPngBtn');
+      if(button) button.disabled = true;
+      setRenderingBusy(true, 'Preparing map screenshot', 'Capturing the current map view as PNG...');
+      try{
+        if(mapRef) mapRef.invalidateSize();
+        await waitForNextPaint();
+        const canvas = await html2canvas(mapEl, {
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: null,
+          logging: false,
+          scale: Math.min(2, window.devicePixelRatio || 1)
+        });
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if(!blob) throw new Error('Browser could not create a PNG image.');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const tab = mapActiveTab ? `_${mapActiveTab}` : '';
+        a.download = (logFileName || 'decoded') + `_map${tab}.png`;
+        document.body.appendChild(a);
+        a.click();
+        URL.revokeObjectURL(a.href);
+        document.body.removeChild(a);
+      }catch(err){
+        showError('Map screenshot failed: ' + (err && err.message ? err.message : String(err)));
+      }finally{
+        setRenderingBusy(false);
+        updateMapActionButtons();
+      }
+    }
+
     function ensureOptionSelected(selectEl, value){
       if(!selectEl || !value) return;
       const has = Array.from(selectEl.options).some(o => o.value === value);
@@ -2694,6 +2782,7 @@
       mapPointsLayer = L.layerGroup().addTo(mapRef);
       mapTrackLayer = L.layerGroup().addTo(mapRef);
       mapHeatLayer = L.layerGroup().addTo(mapRef);
+      mapWarningLayer = L.layerGroup().addTo(mapRef);
     }
 
     function renderMapStats(points, totalLocationMessages, zeroCoordinateCount){
@@ -3025,7 +3114,8 @@
       return grid;
     }
 
-    function renderTrackMap(visiblePoints, latestPoint, track, totalLocationMessages, zeroCoordinateCount){
+    function renderTrackMap(visiblePoints, latestPoint, totalLocationMessages, zeroCoordinateCount){
+      const layers = getMapLayerVisibility();
       renderMapTable(visiblePoints.map(p => ({
         timestamp: p.tsLabel,
         timestampMs: p.timestampMs,
@@ -3037,25 +3127,27 @@
       setMapMetrics('');
       setMapAnalysisNote('');
 
-      visiblePoints.forEach(p => {
-        const isLatest = p === latestPoint;
-        const accuracyLabel = p.horizontalAccuracy == null
-          ? ''
-          : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
-        const latestLabel = isLatest ? '<strong>Latest location</strong><br>' : '';
-        const dot = L.circleMarker([p.lat, p.lon], {
-          radius: isLatest ? 7 : 3,
-          fillColor: isLatest ? '#ff8c00' : '#3388ff',
-          fillOpacity: isLatest ? 0.95 : 0.35,
-          color: isLatest ? '#ffffff' : '#3388ff',
-          weight: isLatest ? 2 : 0,
-          stroke: isLatest,
-          renderer: mapCanvasRenderer
-        }).bindPopup(`${latestLabel}${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
-        mapPointsLayer.addLayer(dot);
-      });
+      if(layers.points){
+        visiblePoints.forEach(p => {
+          const isLatest = p === latestPoint;
+          const accuracyLabel = p.horizontalAccuracy == null
+            ? ''
+            : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
+          const latestLabel = isLatest ? '<strong>Latest location</strong><br>' : '';
+          const dot = L.circleMarker([p.lat, p.lon], {
+            radius: isLatest ? 7 : 3,
+            fillColor: isLatest ? '#ff8c00' : '#3388ff',
+            fillOpacity: isLatest ? 0.95 : 0.35,
+            color: isLatest ? '#ffffff' : '#3388ff',
+            weight: isLatest ? 2 : 0,
+            stroke: isLatest,
+            renderer: mapCanvasRenderer
+          }).bindPopup(`${latestLabel}${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
+          mapPointsLayer.addLayer(dot);
+        });
+      }
 
-      if(track && visiblePoints.length >= 2){
+      if(layers.track && visiblePoints.length >= 2){
         mapTrackLayer.addLayer(L.polyline(visiblePoints.map(p => [p.lat, p.lon]), {
           color: '#cc3333', weight: 2, opacity: 0.7, renderer: mapCanvasRenderer
         }));
@@ -3063,17 +3155,20 @@
     }
 
     function renderSpaceUseMap(visiblePoints){
-      const grid = drawSpaceUseHeatmap(visiblePoints);
-      visiblePoints.forEach(p => {
-        mapPointsLayer.addLayer(L.circleMarker([p.lat, p.lon], {
-          radius: 2,
-          fillColor: '#111827',
-          fillOpacity: 0.35,
-          color: '#ffffff',
-          weight: 0,
-          renderer: mapCanvasRenderer
-        }));
-      });
+      const layers = getMapLayerVisibility();
+      const grid = layers.heatmap ? drawSpaceUseHeatmap(visiblePoints) : buildSpaceUseGrid(visiblePoints);
+      if(layers.points){
+        visiblePoints.forEach(p => {
+          mapPointsLayer.addLayer(L.circleMarker([p.lat, p.lon], {
+            radius: 2,
+            fillColor: '#111827',
+            fillOpacity: 0.35,
+            color: '#ffffff',
+            weight: 0,
+            renderer: mapCanvasRenderer
+          }));
+        });
+      }
       const topCell = grid.cells[0];
       setMapMetrics([
         renderMetricTile('Visited cells', grid.cells.length),
@@ -3101,12 +3196,25 @@
     }
 
     function renderMovementAnalysis(visiblePoints){
+      const layers = getMapLayerVisibility();
       const segments = buildMovementSegments(visiblePoints);
       const summary = movementSummary(visiblePoints, segments);
-      if(visiblePoints.length >= 2){
+      if(layers.track && visiblePoints.length >= 2){
         mapTrackLayer.addLayer(L.polyline(visiblePoints.map(p => [p.lat, p.lon]), {
           color:'#7e22ce', weight:2, opacity:0.75, renderer:mapCanvasRenderer
         }));
+      }
+      if(layers.points){
+        visiblePoints.forEach(point => {
+          mapPointsLayer.addLayer(L.circleMarker([point.lat, point.lon], {
+            radius:3,
+            fillColor:'#2563eb',
+            fillOpacity:0.35,
+            color:'#2563eb',
+            weight:0,
+            renderer:mapCanvasRenderer
+          }));
+        });
       }
       setMapMetrics([
         renderMetricTile('Path distance', formatDistance(summary.totalDistance)),
@@ -3164,6 +3272,7 @@
     }
 
     function renderQualityAnalysis(visiblePoints, totalLocationMessages, zeroCoordinateCount){
+      const layers = getMapLayerVisibility();
       const segments = buildMovementSegments(visiblePoints);
       const dts = segments.map(seg => seg.dtSec).filter(Number.isFinite).sort((a,b)=>a-b);
       const medianDt = dts.length ? ss.medianSorted(dts) : null;
@@ -3181,21 +3290,30 @@
       const meanAccuracy = accuracies.length ? ss.mean(accuracies) : null;
       const p95Accuracy = accuracies.length ? ss.quantileSorted(accuracies.sort((a,b)=>a-b), 0.95) : null;
 
-      speedOutliers.forEach(seg => {
-        mapTrackLayer.addLayer(L.polyline([[seg.from.lat, seg.from.lon], [seg.to.lat, seg.to.lon]], {
-          color:'#dc2626', weight:4, opacity:0.8, renderer:mapCanvasRenderer
-        }).bindPopup(`Speed outlier: ${formatSpeed(seg.speedMps)}<br>${seg.toTime}`));
-      });
-      visiblePoints.forEach(point => {
-        mapPointsLayer.addLayer(L.circleMarker([point.lat, point.lon], {
-          radius:3,
-          fillColor:'#2563eb',
-          fillOpacity:0.35,
-          color:'#2563eb',
-          weight:0,
-          renderer:mapCanvasRenderer
+      if(layers.track && visiblePoints.length >= 2){
+        mapTrackLayer.addLayer(L.polyline(visiblePoints.map(p => [p.lat, p.lon]), {
+          color:'#64748b', weight:2, opacity:0.45, renderer:mapCanvasRenderer
         }));
-      });
+      }
+      if(layers.warnings){
+        speedOutliers.forEach(seg => {
+          mapWarningLayer.addLayer(L.polyline([[seg.from.lat, seg.from.lon], [seg.to.lat, seg.to.lon]], {
+            color:'#dc2626', weight:4, opacity:0.8, renderer:mapCanvasRenderer
+          }).bindPopup(`Speed outlier: ${formatSpeed(seg.speedMps)}<br>${seg.toTime}`));
+        });
+      }
+      if(layers.points){
+        visiblePoints.forEach(point => {
+          mapPointsLayer.addLayer(L.circleMarker([point.lat, point.lon], {
+            radius:3,
+            fillColor:'#2563eb',
+            fillOpacity:0.35,
+            color:'#2563eb',
+            weight:0,
+            renderer:mapCanvasRenderer
+          }));
+        });
+      }
 
       setMapMetrics([
         renderMetricTile('Visible fixes', visiblePoints.length),
@@ -3244,14 +3362,14 @@
 
     function getMapVisiblePoints(){
       if(!mapViewState) return { points: [], startIndex: 0, endIndex: 0, total: 0 };
-      const { points, totalLocationMessages, zeroCoordinateCount, track } = mapViewState;
+      const { points, totalLocationMessages, zeroCoordinateCount } = mapViewState;
       const maxIndex = Math.max(0, points.length - 1);
       const startSlider = document.getElementById('mapTimeStartSlider');
       const endSlider = document.getElementById('mapTimeEndSlider');
       const startIndex = Math.max(0, Math.min(maxIndex, startSlider ? Number(startSlider.value) : 0));
       const endIndex = Math.max(startIndex, Math.min(maxIndex, endSlider ? Number(endSlider.value) : maxIndex));
       const visiblePoints = points.slice(startIndex, endIndex + 1);
-      return { points: visiblePoints, startIndex, endIndex, total: points.length, totalLocationMessages, zeroCoordinateCount, track };
+      return { points: visiblePoints, startIndex, endIndex, total: points.length, totalLocationMessages, zeroCoordinateCount };
     }
 
     function updateMapSliderLabels(){
@@ -3273,7 +3391,7 @@
     function renderMapView(fitBounds){
       if(!mapViewState) return;
       const visible = getMapVisiblePoints();
-      const { totalLocationMessages, zeroCoordinateCount, track } = visible;
+      const { totalLocationMessages, zeroCoordinateCount } = visible;
       const visiblePoints = visible.points;
       const latestPoint = visiblePoints.length ? visiblePoints[visiblePoints.length - 1] : null;
 
@@ -3283,6 +3401,7 @@
       mapPointsLayer.clearLayers();
       mapTrackLayer.clearLayers();
       if(mapHeatLayer) mapHeatLayer.clearLayers();
+      if(mapWarningLayer) mapWarningLayer.clearLayers();
 
       if(mapActiveTab === 'space'){
         renderSpaceUseMap(visiblePoints);
@@ -3291,7 +3410,7 @@
       } else if(mapActiveTab === 'quality'){
         renderQualityAnalysis(visiblePoints, totalLocationMessages, zeroCoordinateCount);
       } else {
-        renderTrackMap(visiblePoints, latestPoint, track, totalLocationMessages, zeroCoordinateCount);
+        renderTrackMap(visiblePoints, latestPoint, totalLocationMessages, zeroCoordinateCount);
       }
 
       if(fitBounds && visiblePoints.length){
@@ -3311,7 +3430,7 @@
       if(mapEl) mapEl.style.display = 'none';
       if(mapWrapper) mapWrapper.style.display = 'none';
       if(msgEl) msgEl.textContent = '';
-      updateMapFullscreenButton();
+      updateMapActionButtons();
       setMapMetrics('');
       setMapAnalysisNote('');
       setMapStatsHtml('');
@@ -3347,7 +3466,6 @@
       if(latSel && (!latSel.value || latSel.value === '')) ensureOptionSelected(latSel, pickedLat);
       if(lonSel && (!lonSel.value || lonSel.value === '')) ensureOptionSelected(lonSel, pickedLon);
 
-      const track = document.getElementById('trackToggle') && document.getElementById('trackToggle').checked;
       const ignoreZeros = document.getElementById('ignoreZeroCoords') && document.getElementById('ignoreZeroCoords').checked;
 
       const points = [];
@@ -3391,16 +3509,17 @@
           mapPointsLayer.clearLayers();
           mapTrackLayer.clearLayers();
           if(mapHeatLayer) mapHeatLayer.clearLayers();
+          if(mapWarningLayer) mapWarningLayer.clearLayers();
         }
-        updateMapFullscreenButton();
+        updateMapActionButtons();
         return;
       }
 
       // Show map now that we have data
       if(mapEl) mapEl.style.display = 'block';
       if(mapWrapper) mapWrapper.style.display = 'block';
-      updateMapFullscreenButton();
-      mapViewState = { points, totalLocationMessages, zeroCoordinateCount, track };
+      updateMapActionButtons();
+      mapViewState = { points, totalLocationMessages, zeroCoordinateCount };
 
       const startSlider = document.getElementById('mapTimeStartSlider');
       const endSlider = document.getElementById('mapTimeEndSlider');
