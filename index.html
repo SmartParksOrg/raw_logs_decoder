@@ -602,7 +602,16 @@
             </div>
           </div>
 
+          <div id="mapTabs" class="tab-bar" role="tablist" aria-label="Map analysis views">
+            <button type="button" class="tab-button active" data-map-tab="track">Track</button>
+            <button type="button" class="tab-button" data-map-tab="space">Space Use</button>
+            <button type="button" class="tab-button" data-map-tab="movement">Movement</button>
+            <button type="button" class="tab-button" data-map-tab="quality">Quality</button>
+          </div>
+
           <div id="mapMessage" class="muted"></div>
+          <div id="mapMetrics" class="metric-strip"></div>
+          <p id="mapAnalysisNote" class="science-note" style="display:none;"></p>
           <!-- Hidden until we have valid data -->
           <div id="mapWrapper" class="visual-wrapper" style="display:none;">
             <div id="map"></div>
@@ -624,6 +633,7 @@
           </div>
 
           <div id="mapStatsBox" style="margin-top:12px;"></div>
+          <div id="mapCharts" class="dashboard-grid" style="margin-top:12px;"></div>
           <div id="mapTable" style="margin-top:12px;"></div>
           <p class="muted" style="margin-top:8px;">Tip: Map uses its own Port/From/To filters above.</p>
         </div>
@@ -1568,6 +1578,7 @@
       loadDecoder();
       initLazyRendering();
       initCmdqTabs();
+      initMapTabs();
       const genBleBtn = document.getElementById('genBleBtn');
       if(genBleBtn){ genBleBtn.onclick = () => renderBleScanIfNeeded(true); }
       const genCmdqBtn = document.getElementById('genCmdqBtn');
@@ -1610,9 +1621,12 @@
     let mapRef = null;
     let mapPointsLayer = null;
     let mapTrackLayer = null;
+    let mapHeatLayer = null;
     let mapCanvasRenderer = null;
     let mapTableRef = null;
+    let mapChartRefs = [];
     let mapViewState = null;
+    let mapActiveTab = 'track';
     let bleScanTableRef = null;
     let bleScanChartRef = null;
     let accelerometerTableRef = null;
@@ -1634,6 +1648,7 @@
       if(aggTableRef){ try { aggTableRef.destroy(); } catch(e){} aggTableRef = null; }
       if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }
       if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
+      destroyMapCharts();
       destroyAccelerometerDashboard();
       if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
       if(bleScanChartRef){ try { bleScanChartRef.destroy(); } catch(e){} bleScanChartRef = null; }
@@ -1642,6 +1657,8 @@
       if(mapTrackLayer) mapTrackLayer.clearLayers();
       analyticsCache = null;
       mapViewState = null;
+      mapActiveTab = 'track';
+      updateMapTabs();
       accelerometerViewState = null;
       cmdqViewState = null;
       cmdqActiveTab = 'overview';
@@ -2458,6 +2475,37 @@
     //          MAP
     // =========================
     const MAP_LOCATION_PORTS = new Set(['2', '13', '16']);
+    const MAP_TABS = new Set(['track', 'space', 'movement', 'quality']);
+
+    function updateMapTabs(){
+      document.querySelectorAll('[data-map-tab]').forEach(button => {
+        const active = button.dataset.mapTab === mapActiveTab;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    function setMapTab(tab){
+      if(!MAP_TABS.has(tab)) return;
+      mapActiveTab = tab;
+      updateMapTabs();
+      if(mapViewState) renderMapView(false);
+    }
+
+    function initMapTabs(){
+      document.querySelectorAll('[data-map-tab]').forEach(button => {
+        button.setAttribute('role', 'tab');
+        button.onclick = () => setMapTab(button.dataset.mapTab);
+      });
+      updateMapTabs();
+    }
+
+    function destroyMapCharts(){
+      mapChartRefs.forEach(chart => { try { chart.destroy(); } catch(e){} });
+      mapChartRefs = [];
+      const charts = document.getElementById('mapCharts');
+      if(charts) charts.innerHTML = '';
+    }
 
     function findMapCoordinateField(fields, aliases, suffixPattern){
       for(const alias of aliases){
@@ -2524,6 +2572,23 @@
         ]
       });
     }
+
+    function renderGenericMapTable(rows, columns){
+      const holder = document.getElementById('mapTable');
+      if(!holder) return;
+      holder.innerHTML = '';
+      if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
+      if(!rows || !rows.length || !columns || !columns.length){ return; }
+      mapTableRef = new Tabulator('#mapTable', {
+        data: rows,
+        layout: 'fitColumns',
+        height: '300px',
+        pagination: 'local',
+        paginationSize: 100,
+        paginationSizeSelector: [50, 100, 250, 500],
+        columns
+      });
+    }
     function downloadMapCSV(){ if (mapTableRef) { mapTableRef.download('csv', (logFileName || 'decoded') + '_map.csv'); } else { showError('No map data to download yet. Generate the map first.'); } }
 
     function ensureOptionSelected(selectEl, value){
@@ -2546,6 +2611,7 @@
       mapCanvasRenderer = L.canvas({ padding: 0.2 });
       mapPointsLayer = L.layerGroup().addTo(mapRef);
       mapTrackLayer = L.layerGroup().addTo(mapRef);
+      mapHeatLayer = L.layerGroup().addTo(mapRef);
     }
 
     function renderMapStats(points, totalLocationMessages, zeroCoordinateCount){
@@ -2571,6 +2637,505 @@
           ${coordinateRows}
           ${horizontalAccuracyRows}
         </table>`;
+    }
+
+    function setMapAnalysisNote(text){
+      const note = document.getElementById('mapAnalysisNote');
+      if(!note) return;
+      note.textContent = text || '';
+      note.style.display = text ? 'block' : 'none';
+    }
+
+    function setMapMetrics(html){
+      const metrics = document.getElementById('mapMetrics');
+      if(metrics) metrics.innerHTML = html || '';
+    }
+
+    function setMapStatsHtml(html){
+      const statsBox = document.getElementById('mapStatsBox');
+      if(statsBox) statsBox.innerHTML = html || '';
+    }
+
+    function toRad(deg){ return deg * Math.PI / 180; }
+    function toDeg(rad){ return rad * 180 / Math.PI; }
+
+    function distanceMeters(a, b){
+      const earthRadius = 6371000;
+      const dLat = toRad(b.lat - a.lat);
+      const dLon = toRad(b.lon - a.lon);
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+      return 2 * earthRadius * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
+    }
+
+    function bearingDegrees(a, b){
+      const lat1 = toRad(a.lat);
+      const lat2 = toRad(b.lat);
+      const dLon = toRad(b.lon - a.lon);
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+      return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    }
+
+    function turnAngleDegrees(previousBearing, nextBearing){
+      if(!Number.isFinite(previousBearing) || !Number.isFinite(nextBearing)) return null;
+      let angle = nextBearing - previousBearing;
+      while(angle > 180) angle -= 360;
+      while(angle < -180) angle += 360;
+      return angle;
+    }
+
+    function formatDistance(meters){
+      if(!Number.isFinite(meters)) return '-';
+      if(Math.abs(meters) >= 1000) return `${fmtNumber(meters / 1000, 2)} km`;
+      return `${fmtNumber(meters, 0)} m`;
+    }
+
+    function formatSpeed(mps){
+      if(!Number.isFinite(mps)) return '-';
+      return `${fmtNumber(mps, 2)} m/s`;
+    }
+
+    function projectedPoint(point, origin){
+      const metersPerDegLat = 111320;
+      const metersPerDegLon = 111320 * Math.cos(toRad(origin.lat));
+      return {
+        x: (point.lon - origin.lon) * metersPerDegLon,
+        y: (point.lat - origin.lat) * metersPerDegLat,
+        point
+      };
+    }
+
+    function latLonFromProjected(x, y, origin){
+      const metersPerDegLat = 111320;
+      const metersPerDegLon = 111320 * Math.cos(toRad(origin.lat));
+      return {
+        lat: origin.lat + y / metersPerDegLat,
+        lon: origin.lon + x / metersPerDegLon
+      };
+    }
+
+    function mapOrigin(points){
+      if(!points.length) return { lat:0, lon:0 };
+      return {
+        lat: ss.mean(points.map(p => p.lat)),
+        lon: ss.mean(points.map(p => p.lon))
+      };
+    }
+
+    function convexHull(points){
+      if(points.length <= 1) return points.slice();
+      const sorted = points.slice().sort((a,b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+      const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      const lower = [];
+      sorted.forEach(p => {
+        while(lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+        lower.push(p);
+      });
+      const upper = [];
+      for(let i = sorted.length - 1; i >= 0; i--){
+        const p = sorted[i];
+        while(upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+        upper.push(p);
+      }
+      upper.pop();
+      lower.pop();
+      return lower.concat(upper);
+    }
+
+    function polygonArea(points){
+      if(points.length < 3) return 0;
+      let area = 0;
+      for(let i = 0; i < points.length; i++){
+        const a = points[i];
+        const b = points[(i + 1) % points.length];
+        area += a.x * b.y - b.x * a.y;
+      }
+      return Math.abs(area) / 2;
+    }
+
+    function buildMovementSegments(points){
+      const segments = [];
+      for(let i = 1; i < points.length; i++){
+        const from = points[i - 1];
+        const to = points[i];
+        const distanceM = distanceMeters(from, to);
+        const dtSec = Number.isFinite(from.timestampMs) && Number.isFinite(to.timestampMs) ? (to.timestampMs - from.timestampMs) / 1000 : null;
+        const speedMps = dtSec && dtSec > 0 ? distanceM / dtSec : null;
+        const bearing = distanceM > 0 ? bearingDegrees(from, to) : null;
+        const previousBearing = segments.length ? segments[segments.length - 1].bearing : null;
+        const turnAngle = turnAngleDegrees(previousBearing, bearing);
+        segments.push({
+          fromTime: from.tsLabel,
+          toTime: to.tsLabel,
+          timestampMs: to.timestampMs,
+          distanceM,
+          dtSec,
+          speedMps,
+          bearing,
+          turnAngle,
+          absTurnAngle: turnAngle == null ? null : Math.abs(turnAngle),
+          from,
+          to
+        });
+      }
+      return segments;
+    }
+
+    function movementSummary(points, segments){
+      const totalDistance = segments.reduce((sum, seg) => sum + (Number.isFinite(seg.distanceM) ? seg.distanceM : 0), 0);
+      const displacement = points.length >= 2 ? distanceMeters(points[0], points[points.length - 1]) : 0;
+      const speeds = segments.map(seg => seg.speedMps).filter(Number.isFinite).sort((a,b)=>a-b);
+      const steps = segments.map(seg => seg.distanceM).filter(Number.isFinite).sort((a,b)=>a-b);
+      const turns = segments.map(seg => seg.absTurnAngle).filter(Number.isFinite).sort((a,b)=>a-b);
+      const times = segments.map(seg => seg.dtSec).filter(Number.isFinite).sort((a,b)=>a-b);
+      return {
+        totalDistance,
+        displacement,
+        straightness: totalDistance > 0 ? displacement / totalDistance : null,
+        meanSpeed: speeds.length ? ss.mean(speeds) : null,
+        maxSpeed: speeds.length ? speeds[speeds.length - 1] : null,
+        medianStep: steps.length ? ss.medianSorted(steps) : null,
+        medianTurn: turns.length ? ss.medianSorted(turns) : null,
+        medianDt: times.length ? ss.medianSorted(times) : null,
+        maxGap: times.length ? times[times.length - 1] : null
+      };
+    }
+
+    function renderMapAnalysisChart(title, datasets, yTitle){
+      const holder = document.getElementById('mapCharts');
+      if(!holder) return;
+      const panel = document.createElement('div');
+      panel.className = 'dashboard-panel';
+      const heading = document.createElement('h3');
+      heading.textContent = title;
+      const wrap = document.createElement('div');
+      wrap.className = 'dashboard-chart';
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      panel.appendChild(heading);
+      panel.appendChild(wrap);
+      holder.appendChild(panel);
+      const chart = new Chart(canvas.getContext('2d'), {
+        type:'line',
+        data:{ datasets },
+        options:{
+          parsing:false,
+          responsive:true,
+          maintainAspectRatio:false,
+          interaction:{ mode:'nearest', intersect:false },
+          scales:{
+            x:{ type:'time', title:{ display:true, text:'Time' } },
+            y:{ type:'linear', title:{ display:true, text:yTitle } }
+          },
+          plugins:{
+            legend:{ display:true, position:'bottom' },
+            tooltip:{
+              callbacks:{
+                title:(items) => {
+                  const x = items[0]?.parsed?.x;
+                  return Number.isFinite(x) ? new Date(x).toLocaleString() : '';
+                },
+                label:(item) => `${item.dataset.label}: ${fmtNumber(item.parsed.y, 2)}`
+              }
+            }
+          }
+        }
+      });
+      mapChartRefs.push(chart);
+    }
+
+    function renderMapBarChart(title, labels, data, label, yTitle){
+      const holder = document.getElementById('mapCharts');
+      if(!holder) return;
+      const panel = document.createElement('div');
+      panel.className = 'dashboard-panel';
+      const heading = document.createElement('h3');
+      heading.textContent = title;
+      const wrap = document.createElement('div');
+      wrap.className = 'dashboard-chart';
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      panel.appendChild(heading);
+      panel.appendChild(wrap);
+      holder.appendChild(panel);
+      const chart = new Chart(canvas.getContext('2d'), {
+        type:'bar',
+        data:{ labels, datasets:[{ label, data, backgroundColor:'#5aa7ff', borderColor:'#5aa7ff' }] },
+        options:{
+          responsive:true,
+          maintainAspectRatio:false,
+          scales:{ y:{ type:'linear', title:{ display:true, text:yTitle } } },
+          plugins:{ legend:{ display:false, position:'bottom' } }
+        }
+      });
+      mapChartRefs.push(chart);
+    }
+
+    function buildSpaceUseGrid(points){
+      if(!points.length) return { cells: [], cellSizeM:0, core50AreaM2:0, range95AreaM2:0, mcpAreaM2:0 };
+      const origin = mapOrigin(points);
+      const projected = points.map(point => projectedPoint(point, origin));
+      const xs = projected.map(p => p.x);
+      const ys = projected.map(p => p.y);
+      const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1);
+      const cellSizeM = Math.max(25, span / 24);
+      const cellMap = new Map();
+      projected.forEach((p, idx) => {
+        const ix = Math.floor(p.x / cellSizeM);
+        const iy = Math.floor(p.y / cellSizeM);
+        const key = `${ix}:${iy}`;
+        if(!cellMap.has(key)){
+          cellMap.set(key, { ix, iy, count:0, dwellSec:0, points:[] });
+        }
+        const cell = cellMap.get(key);
+        cell.count++;
+        cell.points.push(p.point);
+        const next = points[idx + 1];
+        if(next && Number.isFinite(p.point.timestampMs) && Number.isFinite(next.timestampMs)){
+          const dt = Math.max(0, Math.min(3600, (next.timestampMs - p.point.timestampMs) / 1000));
+          cell.dwellSec += dt;
+        }
+      });
+      const cells = Array.from(cellMap.values()).map(cell => {
+        const center = latLonFromProjected((cell.ix + 0.5) * cellSizeM, (cell.iy + 0.5) * cellSizeM, origin);
+        const sw = latLonFromProjected(cell.ix * cellSizeM, cell.iy * cellSizeM, origin);
+        const ne = latLonFromProjected((cell.ix + 1) * cellSizeM, (cell.iy + 1) * cellSizeM, origin);
+        return { ...cell, center, bounds:[[sw.lat, sw.lon], [ne.lat, ne.lon]] };
+      }).sort((a,b) => b.count - a.count);
+
+      const totalCount = points.length;
+      let cumulative = 0;
+      let core50Cells = 0;
+      let range95Cells = 0;
+      cells.forEach(cell => {
+        cumulative += cell.count;
+        if(cumulative <= totalCount * 0.5 || core50Cells === 0) core50Cells++;
+        if(cumulative <= totalCount * 0.95 || range95Cells === 0) range95Cells++;
+      });
+      const hull = convexHull(projected);
+      return {
+        cells,
+        cellSizeM,
+        core50AreaM2: core50Cells * cellSizeM * cellSizeM,
+        range95AreaM2: range95Cells * cellSizeM * cellSizeM,
+        mcpAreaM2: polygonArea(hull)
+      };
+    }
+
+    function drawSpaceUseHeatmap(points){
+      const grid = buildSpaceUseGrid(points);
+      if(!mapHeatLayer) return grid;
+      const maxCount = grid.cells.length ? Math.max(...grid.cells.map(cell => cell.count)) : 1;
+      grid.cells.forEach(cell => {
+        const intensity = cell.count / maxCount;
+        const color = intensity > 0.66 ? '#dc2626' : (intensity > 0.33 ? '#f59e0b' : '#2563eb');
+        const rect = L.rectangle(cell.bounds, {
+          color,
+          weight: 1,
+          opacity: 0.45,
+          fillColor: color,
+          fillOpacity: 0.12 + intensity * 0.45
+        }).bindPopup(`Visits: ${cell.count}<br>Dwell: ${fmtNumber(cell.dwellSec / 60, 1)} min`);
+        mapHeatLayer.addLayer(rect);
+      });
+      return grid;
+    }
+
+    function renderTrackMap(visiblePoints, latestPoint, track, totalLocationMessages, zeroCoordinateCount){
+      renderMapTable(visiblePoints.map(p => ({
+        timestamp: p.tsLabel,
+        timestampMs: p.timestampMs,
+        latitude: p.lat,
+        longitude: p.lon,
+        h_acc_est: p.horizontalAccuracy
+      })));
+      renderMapStats(visiblePoints, totalLocationMessages, zeroCoordinateCount);
+      setMapMetrics('');
+      setMapAnalysisNote('');
+
+      visiblePoints.forEach(p => {
+        const isLatest = p === latestPoint;
+        const accuracyLabel = p.horizontalAccuracy == null
+          ? ''
+          : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
+        const latestLabel = isLatest ? '<strong>Latest location</strong><br>' : '';
+        const dot = L.circleMarker([p.lat, p.lon], {
+          radius: isLatest ? 7 : 3,
+          fillColor: isLatest ? '#ff8c00' : '#3388ff',
+          fillOpacity: isLatest ? 0.95 : 0.35,
+          color: isLatest ? '#ffffff' : '#3388ff',
+          weight: isLatest ? 2 : 0,
+          stroke: isLatest,
+          renderer: mapCanvasRenderer
+        }).bindPopup(`${latestLabel}${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
+        mapPointsLayer.addLayer(dot);
+      });
+
+      if(track && visiblePoints.length >= 2){
+        mapTrackLayer.addLayer(L.polyline(visiblePoints.map(p => [p.lat, p.lon]), {
+          color: '#cc3333', weight: 2, opacity: 0.7, renderer: mapCanvasRenderer
+        }));
+      }
+    }
+
+    function renderSpaceUseMap(visiblePoints){
+      const grid = drawSpaceUseHeatmap(visiblePoints);
+      visiblePoints.forEach(p => {
+        mapPointsLayer.addLayer(L.circleMarker([p.lat, p.lon], {
+          radius: 2,
+          fillColor: '#111827',
+          fillOpacity: 0.35,
+          color: '#ffffff',
+          weight: 0,
+          renderer: mapCanvasRenderer
+        }));
+      });
+      const topCell = grid.cells[0];
+      setMapMetrics([
+        renderMetricTile('Visited cells', grid.cells.length),
+        renderMetricTile('Cell size', formatDistance(grid.cellSizeM)),
+        renderMetricTile('Core use area', `${fmtNumber(grid.core50AreaM2 / 10000, 2)} ha`, 'top cells containing ~50% of fixes'),
+        renderMetricTile('95% use area', `${fmtNumber(grid.range95AreaM2 / 10000, 2)} ha`),
+        renderMetricTile('Convex hull area', `${fmtNumber(grid.mcpAreaM2 / 10000, 2)} ha`),
+        renderMetricTile('Top hotspot', topCell ? `${topCell.count} fixes` : '-')
+      ].join(''));
+      setMapAnalysisNote('Space-use is shown as a simple grid utilization layer. It is useful for exploratory hotspot/core-use review, but it is not a formal KDE, AKDE, Brownian bridge, or LoCoH home-range estimate.');
+      setMapStatsHtml('');
+      renderGenericMapTable(grid.cells.slice(0, 30).map((cell, idx) => ({
+        rank: idx + 1,
+        fixes: cell.count,
+        dwell_min: fmtNumber(cell.dwellSec / 60, 1),
+        latitude: fmtNumber(cell.center.lat, 6),
+        longitude: fmtNumber(cell.center.lon, 6)
+      })), [
+        { title:'Rank', field:'rank', width:80 },
+        { title:'Fixes', field:'fixes', sorter:'number' },
+        { title:'Dwell estimate (min)', field:'dwell_min', sorter:'number' },
+        { title:'Latitude', field:'latitude' },
+        { title:'Longitude', field:'longitude' }
+      ]);
+    }
+
+    function renderMovementAnalysis(visiblePoints){
+      const segments = buildMovementSegments(visiblePoints);
+      const summary = movementSummary(visiblePoints, segments);
+      if(visiblePoints.length >= 2){
+        mapTrackLayer.addLayer(L.polyline(visiblePoints.map(p => [p.lat, p.lon]), {
+          color:'#7e22ce', weight:2, opacity:0.75, renderer:mapCanvasRenderer
+        }));
+      }
+      setMapMetrics([
+        renderMetricTile('Path distance', formatDistance(summary.totalDistance)),
+        renderMetricTile('Net displacement', formatDistance(summary.displacement)),
+        renderMetricTile('Straightness', summary.straightness == null ? '-' : fmtNumber(summary.straightness, 3), 'displacement / path distance'),
+        renderMetricTile('Mean speed', formatSpeed(summary.meanSpeed)),
+        renderMetricTile('Max speed', formatSpeed(summary.maxSpeed)),
+        renderMetricTile('Median step', formatDistance(summary.medianStep)),
+        renderMetricTile('Median turn', summary.medianTurn == null ? '-' : `${fmtNumber(summary.medianTurn, 0)} deg`),
+        renderMetricTile('Max time gap', summary.maxGap == null ? '-' : `${fmtNumber(summary.maxGap / 60, 1)} min`)
+      ].join(''));
+      setMapAnalysisNote('Movement metrics use consecutive fixes in the visible time window. Speed, step length, and turning angle are sensitive to GPS interval and location error.');
+      setMapStatsHtml('');
+      renderMapAnalysisChart('Speed over time', [{
+        label:'Speed',
+        data:segments.filter(s => s.timestampMs != null && Number.isFinite(s.speedMps)).map(s => ({ x:s.timestampMs, y:s.speedMps })),
+        parsing:false,
+        borderColor:'#2563eb',
+        backgroundColor:'#2563eb',
+        pointRadius:segments.length > 600 ? 0 : 2,
+        borderWidth:2
+      }], 'm/s');
+      renderMapAnalysisChart('Step length over time', [{
+        label:'Step length',
+        data:segments.filter(s => s.timestampMs != null && Number.isFinite(s.distanceM)).map(s => ({ x:s.timestampMs, y:s.distanceM })),
+        parsing:false,
+        borderColor:'#16a34a',
+        backgroundColor:'#16a34a',
+        pointRadius:segments.length > 600 ? 0 : 2,
+        borderWidth:2
+      }], 'meters');
+      renderMapBarChart('Turning angle distribution', ['0-30', '30-60', '60-90', '90-135', '135-180'], (() => {
+        const bins = [0,0,0,0,0];
+        segments.forEach(seg => {
+          if(!Number.isFinite(seg.absTurnAngle)) return;
+          const a = seg.absTurnAngle;
+          const idx = a < 30 ? 0 : (a < 60 ? 1 : (a < 90 ? 2 : (a < 135 ? 3 : 4)));
+          bins[idx]++;
+        });
+        return bins;
+      })(), 'Segments', 'count');
+      renderGenericMapTable(segments.slice(0, 500).map(seg => ({
+        toTime: seg.toTime,
+        step_m: fmtNumber(seg.distanceM, 1),
+        dt_min: seg.dtSec == null ? '' : fmtNumber(seg.dtSec / 60, 2),
+        speed_mps: seg.speedMps == null ? '' : fmtNumber(seg.speedMps, 2),
+        turn_deg: seg.turnAngle == null ? '' : fmtNumber(seg.turnAngle, 0)
+      })), [
+        { title:'To time', field:'toTime', minWidth:160 },
+        { title:'Step (m)', field:'step_m', sorter:'number' },
+        { title:'Interval (min)', field:'dt_min', sorter:'number' },
+        { title:'Speed (m/s)', field:'speed_mps', sorter:'number' },
+        { title:'Turn (deg)', field:'turn_deg', sorter:'number' }
+      ]);
+    }
+
+    function renderQualityAnalysis(visiblePoints, totalLocationMessages, zeroCoordinateCount){
+      const segments = buildMovementSegments(visiblePoints);
+      const dts = segments.map(seg => seg.dtSec).filter(Number.isFinite).sort((a,b)=>a-b);
+      const medianDt = dts.length ? ss.medianSorted(dts) : null;
+      const maxGap = dts.length ? dts[dts.length - 1] : null;
+      const gapThreshold = medianDt ? Math.max(3600, medianDt * 5) : 3600;
+      const gaps = segments.filter(seg => Number.isFinite(seg.dtSec) && seg.dtSec > gapThreshold);
+      const speedOutliers = segments.filter(seg => Number.isFinite(seg.speedMps) && seg.speedMps > 30);
+      const duplicateTimes = new Map();
+      visiblePoints.forEach(point => {
+        if(point.timestampMs == null) return;
+        duplicateTimes.set(point.timestampMs, (duplicateTimes.get(point.timestampMs) || 0) + 1);
+      });
+      const duplicateCount = Array.from(duplicateTimes.values()).filter(count => count > 1).reduce((sum, count) => sum + count, 0);
+      const accuracies = visiblePoints.map(p => p.horizontalAccuracy).filter(Number.isFinite);
+      const meanAccuracy = accuracies.length ? ss.mean(accuracies) : null;
+      const p95Accuracy = accuracies.length ? ss.quantileSorted(accuracies.sort((a,b)=>a-b), 0.95) : null;
+
+      speedOutliers.forEach(seg => {
+        mapTrackLayer.addLayer(L.polyline([[seg.from.lat, seg.from.lon], [seg.to.lat, seg.to.lon]], {
+          color:'#dc2626', weight:4, opacity:0.8, renderer:mapCanvasRenderer
+        }).bindPopup(`Speed outlier: ${formatSpeed(seg.speedMps)}<br>${seg.toTime}`));
+      });
+      visiblePoints.forEach(point => {
+        mapPointsLayer.addLayer(L.circleMarker([point.lat, point.lon], {
+          radius:3,
+          fillColor:'#2563eb',
+          fillOpacity:0.35,
+          color:'#2563eb',
+          weight:0,
+          renderer:mapCanvasRenderer
+        }));
+      });
+
+      setMapMetrics([
+        renderMetricTile('Visible fixes', visiblePoints.length),
+        renderMetricTile('Failed fixes', `${zeroCoordinateCount}/${totalLocationMessages}`, 'lat=0 or lon=0 before filtering'),
+        renderMetricTile('Mean accuracy', meanAccuracy == null ? '-' : `${fmtNumber(meanAccuracy, 0)} m`),
+        renderMetricTile('P95 accuracy', p95Accuracy == null ? '-' : `${fmtNumber(p95Accuracy, 0)} m`),
+        renderMetricTile('Speed warnings', speedOutliers.length, '> 30 m/s'),
+        renderMetricTile('Large gaps', gaps.length, `> ${fmtNumber(gapThreshold / 60, 0)} min`),
+        renderMetricTile('Duplicate timestamps', duplicateCount),
+        renderMetricTile('Max gap', maxGap == null ? '-' : `${fmtNumber(maxGap / 60, 1)} min`)
+      ].join(''));
+      setMapAnalysisNote('Quality diagnostics flag potential GPS/filtering issues. The speed threshold is intentionally conservative and should be adjusted for the species and deployment.');
+      setMapStatsHtml('');
+      renderGenericMapTable([
+        ...speedOutliers.slice(0, 100).map(seg => ({ type:'Speed warning', time:seg.toTime, value:formatSpeed(seg.speedMps), detail:`Step ${formatDistance(seg.distanceM)}` })),
+        ...gaps.slice(0, 100).map(seg => ({ type:'Large time gap', time:seg.toTime, value:`${fmtNumber(seg.dtSec / 60, 1)} min`, detail:`Step ${formatDistance(seg.distanceM)}` }))
+      ], [
+        { title:'Issue', field:'type' },
+        { title:'Time', field:'time', minWidth:160 },
+        { title:'Value', field:'value' },
+        { title:'Detail', field:'detail' }
+      ]);
     }
 
     function constrainMapTimeRange(changedHandle){
@@ -2631,41 +3196,20 @@
       const latestPoint = visiblePoints.length ? visiblePoints[visiblePoints.length - 1] : null;
 
       updateMapSliderLabels();
-
-      renderMapTable(visiblePoints.map(p => ({
-        timestamp: p.tsLabel,
-        timestampMs: p.timestampMs,
-        latitude: p.lat,
-        longitude: p.lon,
-        h_acc_est: p.horizontalAccuracy
-      })));
-      renderMapStats(visiblePoints, totalLocationMessages, zeroCoordinateCount);
-
       ensureMapInitialized();
+      destroyMapCharts();
       mapPointsLayer.clearLayers();
       mapTrackLayer.clearLayers();
-      visiblePoints.forEach(p => {
-        const isLatest = p === latestPoint;
-        const accuracyLabel = p.horizontalAccuracy == null
-          ? ''
-          : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
-        const latestLabel = isLatest ? '<strong>Latest location</strong><br>' : '';
-        const dot = L.circleMarker([p.lat, p.lon], {
-          radius: isLatest ? 7 : 3,
-          fillColor: isLatest ? '#ff8c00' : '#3388ff',
-          fillOpacity: isLatest ? 0.95 : 0.35,
-          color: isLatest ? '#ffffff' : '#3388ff',
-          weight: isLatest ? 2 : 0,
-          stroke: isLatest,
-          renderer: mapCanvasRenderer
-        }).bindPopup(`${latestLabel}${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
-        mapPointsLayer.addLayer(dot);
-      });
+      if(mapHeatLayer) mapHeatLayer.clearLayers();
 
-      if(track && visiblePoints.length >= 2){
-        mapTrackLayer.addLayer(L.polyline(visiblePoints.map(p => [p.lat, p.lon]), {
-          color: '#cc3333', weight: 2, opacity: 0.7, renderer: mapCanvasRenderer
-        }));
+      if(mapActiveTab === 'space'){
+        renderSpaceUseMap(visiblePoints);
+      } else if(mapActiveTab === 'movement'){
+        renderMovementAnalysis(visiblePoints);
+      } else if(mapActiveTab === 'quality'){
+        renderQualityAnalysis(visiblePoints, totalLocationMessages, zeroCoordinateCount);
+      } else {
+        renderTrackMap(visiblePoints, latestPoint, track, totalLocationMessages, zeroCoordinateCount);
       }
 
       if(fitBounds && visiblePoints.length){
@@ -2685,6 +3229,11 @@
       if(mapEl) mapEl.style.display = 'none';
       if(mapWrapper) mapWrapper.style.display = 'none';
       if(msgEl) msgEl.textContent = '';
+      setMapMetrics('');
+      setMapAnalysisNote('');
+      setMapStatsHtml('');
+      destroyMapCharts();
+      renderGenericMapTable([], []);
 
       if(!analyticsCache){
         if(msgEl) msgEl.textContent = 'no valid location data found';
@@ -2755,7 +3304,11 @@
         if(sliderWrapper) sliderWrapper.style.display = 'none';
         renderMapTable([]);
         renderMapStats([], totalLocationMessages, zeroCoordinateCount);
-        if(mapRef){ mapPointsLayer.clearLayers(); mapTrackLayer.clearLayers(); }
+        if(mapRef){
+          mapPointsLayer.clearLayers();
+          mapTrackLayer.clearLayers();
+          if(mapHeatLayer) mapHeatLayer.clearLayers();
+        }
         return;
       }
 
@@ -3992,6 +4545,15 @@
     if(cmdqCard){
       cmdqCard.addEventListener('toggle', () => {
         if(cmdqCard.open) setTimeout(() => cmdqChartRefs.forEach(chart => chart.resize()), 0);
+      });
+    }
+    const mapCard = document.getElementById('mapCard');
+    if(mapCard){
+      mapCard.addEventListener('toggle', () => {
+        if(mapCard.open) setTimeout(() => {
+          if(mapRef) mapRef.invalidateSize();
+          mapChartRefs.forEach(chart => chart.resize());
+        }, 0);
       });
     }
   </script>
