@@ -263,6 +263,35 @@
     .chart-stats table{ width:100%; border-collapse:collapse; font-size:12px; }
     .chart-stats th, .chart-stats td{ padding:4px 6px; border-top:1px solid rgba(255,255,255,.08); text-align:right; white-space:nowrap; }
     .chart-stats th:first-child, .chart-stats td:first-child{ text-align:left; }
+    .tab-bar{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin: 12px 0;
+    }
+    .tab-button{
+      appearance:none;
+      border:1px solid rgba(255,255,255,.12);
+      background:var(--bg-elev);
+      color:var(--text);
+      border-radius:999px;
+      padding:7px 12px;
+      cursor:pointer;
+      font-weight:600;
+      margin:0;
+    }
+    .tab-button.active{
+      background:linear-gradient(180deg, var(--brand), color-mix(in oklab, var(--brand) 80%, black));
+      color:#fff;
+      border-color:transparent;
+    }
+    .row-detail-holder{
+      margin:8px 0 2px;
+      padding:10px;
+      background:rgba(255,255,255,.05);
+      border-radius:8px;
+      border:1px solid rgba(255,255,255,.08);
+    }
     @media (max-width: 900px){ .dashboard-grid{ grid-template-columns: 1fr; } }
     #renderingOverlay{
       position:fixed;
@@ -310,8 +339,8 @@
       <div class="rendering-dialog">
         <div class="spinner" aria-hidden="true"></div>
         <div>
-          <strong>Rendering decoded results</strong>
-          <div class="muted">Preparing tables and graphs...</div>
+          <strong id="renderingOverlayTitle">Rendering decoded results</strong>
+          <div id="renderingOverlayDetail" class="muted">Preparing tables and graphs...</div>
         </div>
       </div>
     </div>
@@ -375,7 +404,7 @@
     </details>
 
     <!-- === EXPORT SECTION === -->
-    <details class="card">
+    <details id="exportCard" class="card">
       <summary><span class="chev">▸</span> Export</summary>
       <div class="section-body">
         <button id="exportButton" class="btn secondary" style="display:none;" onclick="exportToJson()">Export JSON</button>
@@ -385,7 +414,7 @@
     </details>
 
     <!-- === ANALYTICS SECTION === -->
-    <details class="card">
+    <details id="analyticsCard" class="card">
       <summary><span class="chev">▸</span> Simple Analytics (tables, charts & statistics)</summary>
       <div class="section-body">
         <div id="analyticsPanel">
@@ -497,7 +526,7 @@
     </details>
 
     <!-- === MAP SECTION === -->
-    <details class="card">
+    <details id="mapCard" class="card">
       <summary><span class="chev">▸</span> Map</summary>
       <div class="section-body">
         <!-- Hidden (like analytics) until data is decoded -->
@@ -574,7 +603,7 @@
     </details>
 
     <!-- === BLE SCAN (PORT 29 -> 11) SECTION === -->
-    <details class="card">
+    <details id="bleScanCard" class="card">
       <summary><span class="chev">▸</span> BLE Scan Results</summary>
       <div class="section-body">
         <div id="bleScanPanel" style="display:none;">
@@ -626,6 +655,12 @@
               <span id="cmdqTimeEndLabel"></span>
             </div>
           </div>
+          <div id="cmdqTabs" class="tab-bar" role="tablist" aria-label="CMDQ dashboard views">
+            <button type="button" class="tab-button active" data-cmdq-tab="overview">Overview</button>
+            <button type="button" class="tab-button" data-cmdq-tab="heart">Heart</button>
+            <button type="button" class="tab-button" data-cmdq-tab="activity">Activity</button>
+            <button type="button" class="tab-button" data-cmdq-tab="raw">Raw data</button>
+          </div>
           <div id="cmdqCharts" class="dashboard-grid"></div>
           <div id="cmdqTable" style="margin-top:12px;"></div>
         </div>
@@ -633,7 +668,7 @@
     </details>
 
     <!-- === LOG MESSAGES SECTION === -->
-    <details class="card">
+    <details id="logMessagesCard" class="card">
       <summary><span class="chev">▸</span> Log messages</summary>
       <div class="section-body">
         <p id="logTip" class="muted" style="margin-top:0; display:none;">Tip: click a row to toggle and view the full message content.</p>
@@ -649,6 +684,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
   <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.3/dist/simple-statistics.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="./app-ui.js"></script>
 
   <script>
     const versionLabel = document.getElementById("appVersion");
@@ -781,6 +817,7 @@
     function clearError(){ const b=document.getElementById("errorBanner"); b.textContent=""; b.style.display="none";}
 
     let decodedOutput = [];
+    let decodedDataCache = null;
     let logFileName = null;
     let decoderLoaded = false;
     let base64Blocks = [];
@@ -797,17 +834,37 @@
       });
     }
 
-    function setRenderingBusy(isBusy){
+    function setRenderingBusy(isBusy, title="Rendering decoded results", detail="Preparing tables and graphs..."){
+      if(window.RawLogsUI && typeof window.RawLogsUI.setBusy === "function"){
+        window.RawLogsUI.setBusy(isBusy, title, detail);
+        return;
+      }
       const overlay = document.getElementById("renderingOverlay");
       if(overlay) overlay.style.display = isBusy ? "flex" : "none";
     }
 
     function afterNextPaint(callback){
+      if(window.RawLogsUI && typeof window.RawLogsUI.afterNextPaint === "function"){
+        window.RawLogsUI.afterNextPaint(callback);
+        return;
+      }
       if(typeof requestAnimationFrame === "function"){
         requestAnimationFrame(() => requestAnimationFrame(callback));
       } else {
         setTimeout(callback, 0);
       }
+    }
+
+    function runWithRenderingBusy(title, detail, callback){
+      if(window.RawLogsUI && typeof window.RawLogsUI.runWithBusy === "function"){
+        window.RawLogsUI.runWithBusy(title, detail, callback);
+        return;
+      }
+      setRenderingBusy(true, title, detail);
+      afterNextPaint(() => {
+        try { callback(); }
+        finally { setRenderingBusy(false); }
+      });
     }
 
     function loadDecoder(callback){
@@ -867,30 +924,22 @@
       bar.style.width = pct + "%"; bar.textContent = pct + "%";
     }
 
-    function decodeNextBlock(index){
-      if (index >= base64Blocks.length) {
-        document.getElementById("progressWrapper").style.display = "none";
-        setRenderingBusy(true);
-        afterNextPaint(() => {
-          try{
-            buildTable(decodedOutput);
-            document.getElementById("exportButton").style.display = "inline-block";
-            document.getElementById("exportCsvButton").style.display = "inline-block";
-            document.getElementById("exportXlsButton").style.display = "inline-block";
-            renderMessageSummary(decodedOutput);
-            renderBundledSummary(decodedOutput);
-            renderBleScanPanel(decodedOutput, true);
-            renderCmdqPanel(decodedOutput, true);
-            openOnlyCard("decodedSummaryCard");
-            prepareAnalytics();
-          } finally {
-            setRenderingBusy(false);
-            decodeBtn.disabled = false;
-            isDecoding = false;
-          }
-        });
-        return;
+    function splitLogLines(text){
+      const lines = [];
+      let start = 0;
+      for(let i = 0; i <= text.length; i++){
+        const ch = text.charCodeAt(i);
+        if(i === text.length || ch === 10 || ch === 13){
+          const line = text.slice(start, i).trim();
+          if(line) lines.push(line);
+          if(ch === 13 && text.charCodeAt(i + 1) === 10) i++;
+          start = i + 1;
+        }
       }
+      return lines;
+    }
+
+    function decodeSingleBlock(index){
       try {
         const block = base64Blocks[index];
         const bytes = base64ToBytes(block);
@@ -909,8 +958,46 @@
       } catch (err) {
         decodedOutput.push({ block:index+1, error:"Decoding failed: " + (err && err.message ? err.message : String(err)), rawBlock: base64Blocks[index] });
       }
-      updateProgress(index+1, base64Blocks.length);
-      setTimeout(() => decodeNextBlock(index+1), 0);
+    }
+
+    function finishDecoding(){
+      document.getElementById("progressWrapper").style.display = "none";
+      setRenderingBusy(true, "Preparing decoded summary", "Summarizing decoded messages...");
+      afterNextPaint(() => {
+        try{
+          document.getElementById("exportButton").style.display = "inline-block";
+          document.getElementById("exportCsvButton").style.display = "inline-block";
+          document.getElementById("exportXlsButton").style.display = "inline-block";
+          renderMessageSummary(decodedOutput);
+          renderBundledSummary(decodedOutput);
+          openOnlyCard("decodedSummaryCard");
+        } finally {
+          setRenderingBusy(false);
+          decodeBtn.disabled = false;
+          isDecoding = false;
+        }
+      });
+    }
+
+    function decodeNextBlock(index){
+      if (index >= base64Blocks.length) {
+        finishDecoding();
+        return;
+      }
+
+      const started = performance.now();
+      const maxChunkSize = 350;
+      const maxChunkMs = 18;
+      let nextIndex = index;
+      while(nextIndex < base64Blocks.length){
+        decodeSingleBlock(nextIndex);
+        nextIndex++;
+        if(nextIndex - index >= maxChunkSize) break;
+        if(performance.now() - started >= maxChunkMs) break;
+      }
+
+      updateProgress(nextIndex, base64Blocks.length);
+      setTimeout(() => decodeNextBlock(nextIndex), 0);
     }
 
     function processFile(){
@@ -924,6 +1011,8 @@
 
       logFileName = file.name.replace(/\.[^.]+$/, "");
       decodedOutput = []; base64Blocks = [];
+      decodedDataCache = null;
+      if (typeof resetRenderedViews === "function") resetRenderedViews();
       decodeBtn.disabled = true;
       updateProgress(0, 1);
       openOnlyCard("loadRawLogCard");
@@ -945,9 +1034,9 @@
 
       const reader = new FileReader();
       reader.onload = (e) => {
-        const text = (e.target.result || "").trim();
-        if (!text) { showError("Selected file is empty."); decodeBtn.disabled = false; isDecoding = false; return; }
-        base64Blocks = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+        const text = e.target.result || "";
+        base64Blocks = splitLogLines(text);
+        if (!base64Blocks.length) { showError("Selected file is empty."); decodeBtn.disabled = false; isDecoding = false; return; }
         updateProgress(0, base64Blocks.length);
         decodeNextBlock(0);
       };
@@ -956,7 +1045,7 @@
     }
 
     // ---------- Table ----------
-    function buildTable(data){
+    function buildRawTableRows(data){
       const flatRows = [];
       data.forEach((entry) => {
         if (entry.port === 29 && entry.decodedData && typeof entry.decodedData === "object") {
@@ -977,25 +1066,42 @@
           });
         }
       });
+      return flatRows;
+    }
+
+    function buildTable(data){
+      const flatRows = getRawTableRows(data || []);
 
       // Show or hide the tip depending on data presence
       const tip = document.getElementById("logTip");
       if (tip) tip.style.display = flatRows.length ? "block" : "none";
 
-      new Tabulator("#output", {
-        data: flatRows, layout: "fitColumns", height: "700px",
+      if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }
+      outputTableRef = new Tabulator("#output", {
+        data: flatRows,
+        layout: "fitColumns",
+        height: "700px",
+        pagination: "local",
+        paginationSize: 100,
+        paginationSizeSelector: [50, 100, 250, 500],
         columns: [
           { title: "Timestamp (local)", field: "timestamp", sorter: "string", headerFilter: "input" },
           { title: "Port", field: "port", sorter: "number", headerFilter: "input" }
         ],
-        rowFormatter: function (row) {
+        rowClick: function (e, row) {
           const data = row.getData();
+          const rowEl = row.getElement();
+          const existing = rowEl.querySelector(".row-detail-holder");
+          if(existing){
+            existing.remove();
+            return;
+          }
           const holder = document.createElement("div");
+          holder.className = "row-detail-holder";
           const pre = document.createElement("pre");
           pre.innerText = JSON.stringify(data.data != null ? data.data : {}, null, 2);
-          holder.appendChild(pre); holder.style.padding = "10px"; holder.style.background = "#f8f8f8";
-          row.getElement().appendChild(holder); holder.style.display = "none";
-          row.getElement().addEventListener("click", () => { holder.style.display = holder.style.display === "none" ? "block" : "none"; });
+          holder.appendChild(pre);
+          rowEl.appendChild(holder);
         }
       });
     }
@@ -1124,9 +1230,9 @@
       return schema;
     }
 
-    function getMessageRows(){
+    function buildMessageRowsFromDecoded(all){
       const rows=[];
-      decodedOutput.forEach((entry)=>{
+      (all || []).forEach((entry)=>{
         if(entry.port===29 && entry.decodedData && typeof entry.decodedData==="object"){
           Object.values(entry.decodedData).forEach((sub)=>{
             if(!sub||typeof sub!=="object"||!("port" in sub)) return;
@@ -1173,6 +1279,47 @@
       return rows;
     }
 
+    function buildNumericFieldList(schema, normalizedRows){
+      const numericFields = [];
+      schema.forEach(k => {
+        for(const r of normalizedRows){
+          const v = (r.normalized && Object.prototype.hasOwnProperty.call(r.normalized,k)) ? r.normalized[k] :
+                    (r.dataObj && Object.prototype.hasOwnProperty.call(r.dataObj,k) ? r.dataObj[k] : undefined);
+          if (typeof v === 'number' && isFinite(v)) { numericFields.push(k); break; }
+        }
+      });
+      return numericFields;
+    }
+
+    function ensureDecodedDataCache(){
+      if(decodedDataCache) return decodedDataCache;
+      const messageRows = buildMessageRowsFromDecoded(decodedOutput);
+      const accum = new Set();
+      const normalizedRows = messageRows.map(r => ({...r, normalized: normalizeForCSV(r.dataObj, accum)}));
+      const schema = buildSchemaFromDecodersAndData(normalizedRows);
+      const numericFields = buildNumericFieldList(schema, normalizedRows);
+      decodedDataCache = {
+        messageRows,
+        normalizedRows,
+        schema,
+        numericFields,
+        rawTableRows: null,
+        cmdqRows: null,
+        bleScanRows: null
+      };
+      return decodedDataCache;
+    }
+
+    function getRawTableRows(data){
+      const cache = ensureDecodedDataCache();
+      if(!cache.rawTableRows) cache.rawTableRows = buildRawTableRows(data || decodedOutput);
+      return cache.rawTableRows;
+    }
+
+    function getMessageRows(){
+      return ensureDecodedDataCache().messageRows;
+    }
+
     // ---------- Exports ----------
     function exportToJson(){
       const jsonStr = JSON.stringify(decodedOutput, null, 4);
@@ -1181,9 +1328,9 @@
       a.download = (logFileName || "decoded") + "_decoded.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
     function buildWideCSV(){
-      const rows = getMessageRows();
-      const accum=new Set(); rows.forEach(r => r.normalized = normalizeForCSV(r.dataObj, accum));
-      const schema = buildSchemaFromDecodersAndData(rows);
+      const cache = ensureDecodedDataCache();
+      const rows = cache.normalizedRows;
+      const schema = cache.schema;
       const header = ["timestamp_utc","timestamp_src","port", ...schema];
       const lines = [header.join(",")];
 
@@ -1210,10 +1357,9 @@
     }
     function excelSerialFromISO(iso){ if(!iso) return null; const t = Date.parse(iso); if (isNaN(t)) return null; return t / 86400000 + 25569; }
     function exportToXLSX(){
-      const rows = getMessageRows();
-      const accum=new Set();
-      const normalizedRows = rows.map(r => ({ ...r, normalized: normalizeForCSV(r.dataObj, accum) }));
-      const schema = buildSchemaFromDecodersAndData(normalizedRows);
+      const cache = ensureDecodedDataCache();
+      const normalizedRows = cache.normalizedRows;
+      const schema = cache.schema;
       const header = ["timestamp_utc","timestamp_src","port", ...schema];
 
       const aoa = []; aoa.push(header);
@@ -1269,12 +1415,82 @@
     });
 
     decodeBtn.addEventListener("click", processFile);
+
+    function hasDecodedResults(){
+      return decodedOutput.length > 0 && !isDecoding;
+    }
+
+    function renderLogMessagesIfNeeded(){
+      if(!hasDecodedResults() || outputTableRef) return;
+      runWithRenderingBusy("Rendering log table", "Building rows for the raw decoded messages...", () => buildTable(decodedOutput));
+    }
+
+    function renderAnalyticsIfNeeded(renderDefault=true){
+      if(!hasDecodedResults()) return;
+      const shouldRenderDefault = renderDefault && (!analyticsCache || !chartRef);
+      runWithRenderingBusy("Preparing analytics", "Building chart controls and default statistics...", () => ensureAnalyticsPrepared(shouldRenderDefault));
+    }
+
+    function showMapPanelIfNeeded(){
+      if(!hasDecodedResults()) return;
+      runWithRenderingBusy("Preparing map controls", "Indexing location fields and time filters...", () => {
+        ensureAnalyticsPrepared(false);
+        const panel = document.getElementById('mapPanel');
+        if(panel) panel.style.display = 'block';
+      });
+    }
+
+    function renderMapIfNeeded(){
+      if(!hasDecodedResults()) return;
+      runWithRenderingBusy("Rendering map", "Filtering locations and drawing visible points...", () => {
+        ensureAnalyticsPrepared(false);
+        generateMap();
+      });
+    }
+
+    function renderBleScanIfNeeded(force=false){
+      if(!hasDecodedResults()) return;
+      const panel = document.getElementById('bleScanPanel');
+      if(!force && panel && panel.style.display === 'block') return;
+      const resetDateRange = !bleScanTableRef && !bleScanChartRef;
+      runWithRenderingBusy("Rendering BLE scan results", "Collecting detections and drawing RSSI trends...", () => renderBleScanPanel(decodedOutput, resetDateRange));
+    }
+
+    function renderCmdqIfNeeded(force=false){
+      if(!hasDecodedResults()) return;
+      const panel = document.getElementById('cmdqPanel');
+      if(!force && panel && panel.style.display === 'block'){
+        setTimeout(() => cmdqChartRefs.forEach(chart => chart.resize()), 0);
+        return;
+      }
+      const resetDateRange = !cmdqViewState;
+      runWithRenderingBusy("Rendering CMDQ dashboard", "Preparing cardiac monitoring charts...", () => renderCmdqPanel(decodedOutput, resetDateRange));
+    }
+
+    function bindLazyCard(cardId, callback){
+      const card = document.getElementById(cardId);
+      if(!card) return;
+      card.addEventListener('toggle', () => {
+        if(card.open) callback();
+      });
+    }
+
+    function initLazyRendering(){
+      bindLazyCard('analyticsCard', () => renderAnalyticsIfNeeded(true));
+      bindLazyCard('mapCard', showMapPanelIfNeeded);
+      bindLazyCard('bleScanCard', renderBleScanIfNeeded);
+      bindLazyCard('cmdqCard', renderCmdqIfNeeded);
+      bindLazyCard('logMessagesCard', renderLogMessagesIfNeeded);
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       loadDecoder();
+      initLazyRendering();
+      initCmdqTabs();
       const genBleBtn = document.getElementById('genBleBtn');
-      if(genBleBtn){ genBleBtn.onclick = () => renderBleScanPanel(decodedOutput); }
+      if(genBleBtn){ genBleBtn.onclick = () => renderBleScanIfNeeded(true); }
       const genCmdqBtn = document.getElementById('genCmdqBtn');
-      if(genCmdqBtn){ genCmdqBtn.onclick = () => renderCmdqPanel(decodedOutput); }
+      if(genCmdqBtn){ genCmdqBtn.onclick = () => renderCmdqIfNeeded(true); }
       ['cmdqTimeStartSlider','cmdqTimeEndSlider'].forEach(id => {
         const slider = document.getElementById(id);
         if(!slider) return;
@@ -1296,6 +1512,7 @@
     let analyticsCache = null;
     let chartRef = null;
     let aggTableRef = null;
+    let outputTableRef = null;
 
     // Map globals
     let mapRef = null;
@@ -1309,10 +1526,30 @@
     let cmdqTableRef = null;
     let cmdqChartRefs = [];
     let cmdqViewState = null;
+    let cmdqActiveTab = 'overview';
 
     // Outlier auto-range flags
     let needRecalcX = true, needRecalcY = true;
     let analysisRenderFrame = null;
+
+    function resetRenderedViews(){
+      if(chartRef){ try { chartRef.destroy(); } catch(e){} chartRef = null; }
+      if(aggTableRef){ try { aggTableRef.destroy(); } catch(e){} aggTableRef = null; }
+      if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }
+      if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
+      if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
+      if(bleScanChartRef){ try { bleScanChartRef.destroy(); } catch(e){} bleScanChartRef = null; }
+      destroyCmdqDashboard();
+      if(mapPointsLayer) mapPointsLayer.clearLayers();
+      if(mapTrackLayer) mapTrackLayer.clearLayers();
+      analyticsCache = null;
+      mapViewState = null;
+      cmdqViewState = null;
+      cmdqActiveTab = 'overview';
+      updateCmdqTabs();
+      needRecalcX = true;
+      needRecalcY = true;
+    }
 
     function scheduleGenerateAnalysis(){
       if(analysisRenderFrame != null) return;
@@ -1330,20 +1567,11 @@
       return dt;
     }
 
-    function prepareAnalytics(){
-      const rows = getMessageRows();
-      const accum = new Set();
-      const normalized = rows.map(r => ({...r, normalized: normalizeForCSV(r.dataObj, accum)}));
-      const schema = buildSchemaFromDecodersAndData(normalized);
-
-      const numericFields = [];
-      schema.forEach(k => {
-        for(const r of normalized){
-          const v = (r.normalized && Object.prototype.hasOwnProperty.call(r.normalized,k)) ? r.normalized[k] :
-                    (r.dataObj && Object.prototype.hasOwnProperty.call(r.dataObj,k) ? r.dataObj[k] : undefined);
-          if (typeof v === 'number' && isFinite(v)) { numericFields.push(k); break; }
-        }
-      });
+    function prepareAnalytics(renderDefault=true){
+      const cache = ensureDecodedDataCache();
+      const normalized = cache.normalizedRows;
+      const schema = cache.schema;
+      const numericFields = cache.numericFields;
 
       analyticsCache = { rows: normalized, schema, numericFields };
       buildAnalyticsUI(numericFields);
@@ -1366,7 +1594,17 @@
       const defaults = ["bat","temp","SIV","h_acc_est","cmdq_activity_average","cmdq_hrv"];
       for(const k of defaults){ if(numericFields.includes(k)){ document.getElementById('fieldSelect').value = k; break; } }
       needRecalcX = true; needRecalcY = true;
-      generateAnalysis();
+      if(renderDefault) generateAnalysis();
+    }
+
+    function ensureAnalyticsPrepared(renderDefault=false){
+      if(!decodedOutput.length) return false;
+      if(!analyticsCache){
+        prepareAnalytics(renderDefault);
+      } else if(renderDefault) {
+        generateAnalysis();
+      }
+      return true;
     }
 
     function resetOutlierX(){
@@ -1408,7 +1646,7 @@
       toggleOutlierUI();
 
       const genMapBtn = document.getElementById('genMapBtn');
-      if(genMapBtn){ genMapBtn.onclick = generateMap; }
+      if(genMapBtn){ genMapBtn.onclick = renderMapIfNeeded; }
       const dlMapBtn = document.getElementById('downloadMapBtn');
       if(dlMapBtn){ dlMapBtn.onclick = downloadMapCSV; }
       ['mapTimeStartSlider','mapTimeEndSlider'].forEach(id => {
@@ -1416,8 +1654,9 @@
         if(!slider) return;
         slider.oninput = () => {
           constrainMapTimeRange(id === 'mapTimeStartSlider' ? 'start' : 'end');
-          renderMapView(false);
+          updateMapSliderLabels();
         };
+        slider.onchange = () => renderMapView(false);
       });
 
       // Recalculate ranges when fields or row-level filters change.
@@ -2252,8 +2491,8 @@
       rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
     }
 
-    function renderMapView(fitBounds){
-      if(!mapViewState) return;
+    function getMapVisiblePoints(){
+      if(!mapViewState) return { points: [], startIndex: 0, endIndex: 0, total: 0 };
       const { points, totalLocationMessages, zeroCoordinateCount, track } = mapViewState;
       const maxIndex = Math.max(0, points.length - 1);
       const startSlider = document.getElementById('mapTimeStartSlider');
@@ -2261,6 +2500,12 @@
       const startIndex = Math.max(0, Math.min(maxIndex, startSlider ? Number(startSlider.value) : 0));
       const endIndex = Math.max(startIndex, Math.min(maxIndex, endSlider ? Number(endSlider.value) : maxIndex));
       const visiblePoints = points.slice(startIndex, endIndex + 1);
+      return { points: visiblePoints, startIndex, endIndex, total: points.length, totalLocationMessages, zeroCoordinateCount, track };
+    }
+
+    function updateMapSliderLabels(){
+      const visible = getMapVisiblePoints();
+      const visiblePoints = visible.points;
       const latestPoint = visiblePoints.length ? visiblePoints[visiblePoints.length - 1] : null;
 
       const startLabel = document.getElementById('mapTimeStartLabel');
@@ -2269,9 +2514,19 @@
       if(startLabel) startLabel.textContent = visiblePoints[0]?.tsLabel || 'Unknown time';
       if(endLabel) endLabel.textContent = latestPoint?.tsLabel || 'Unknown time';
       if(currentLabel){
-        currentLabel.textContent = `${visiblePoints.length}/${points.length} points`;
+        currentLabel.textContent = `${visiblePoints.length}/${visible.total} points`;
       }
       updateMapTimeRangeVisual();
+    }
+
+    function renderMapView(fitBounds){
+      if(!mapViewState) return;
+      const visible = getMapVisiblePoints();
+      const { totalLocationMessages, zeroCoordinateCount, track } = visible;
+      const visiblePoints = visible.points;
+      const latestPoint = visiblePoints.length ? visiblePoints[visiblePoints.length - 1] : null;
+
+      updateMapSliderLabels();
 
       renderMapTable(visiblePoints.map(p => ({
         timestamp: p.tsLabel,
@@ -2527,6 +2782,24 @@
     }
 
     function collectBleScanRowsFromPort29(all){
+      if(all === decodedOutput || !all){
+        const cache = ensureDecodedDataCache();
+        if(cache.bleScanRows) return cache.bleScanRows;
+        cache.bleScanRows = collectBleScanRowsFromMessageRows(cache.messageRows);
+        return cache.bleScanRows;
+      }
+
+      const rows = collectBleScanRowsFromDecoded(all);
+
+      return rows.sort((a,b) => {
+        const ta = a.timestamp_utc ? Date.parse(a.timestamp_utc) : -Infinity;
+        const tb = b.timestamp_utc ? Date.parse(b.timestamp_utc) : -Infinity;
+        if(ta !== tb) return ta - tb;
+        return a.device.localeCompare(b.device);
+      });
+    }
+
+    function collectBleScanRowsFromDecoded(all){
       const rows = [];
       (all || []).forEach((entry) => {
         if(!entry || entry.port !== 29 || !entry.decodedData || typeof entry.decodedData !== 'object') return;
@@ -2535,7 +2808,16 @@
           rows.push(...extractBleDetections(sub.data, sub.timestamp));
         });
       });
+      return rows;
+    }
 
+    function collectBleScanRowsFromMessageRows(messageRows){
+      const rows = [];
+      (messageRows || []).forEach((row) => {
+        if(String(row.source_port) !== '29' || String(row.port) !== '11') return;
+        const fallbackTsSec = row.timestamp_utc ? Date.parse(row.timestamp_utc) / 1000 : null;
+        rows.push(...extractBleDetections(row.dataObj, fallbackTsSec));
+      });
       return rows.sort((a,b) => {
         const ta = a.timestamp_utc ? Date.parse(a.timestamp_utc) : -Infinity;
         const tb = b.timestamp_utc ? Date.parse(b.timestamp_utc) : -Infinity;
@@ -2688,8 +2970,8 @@
       return Number.isFinite(n) ? n : null;
     }
 
-    function collectCmdqRows(){
-      return getMessageRows()
+    function collectCmdqRowsFromMessageRows(messageRows){
+      return (messageRows || [])
         .filter(row => String(row.port) === '15')
         .map(row => {
           const d = row.dataObj || {};
@@ -2731,6 +3013,12 @@
           if(b.timestampMs == null) return -1;
           return a.timestampMs - b.timestampMs;
         });
+    }
+
+    function collectCmdqRows(){
+      const cache = ensureDecodedDataCache();
+      if(!cache.cmdqRows) cache.cmdqRows = collectCmdqRowsFromMessageRows(cache.messageRows);
+      return cache.cmdqRows;
     }
 
     function averageNumeric(rows, field){
@@ -2780,6 +3068,36 @@
         y1:{ position:'right', suggestedMin:60, suggestedMax:200, title:'BPM' }
       }
     ];
+
+    const CMDQ_TAB_CHARTS = {
+      overview: ['success', 'bpm_activity', 'bpm_temperature', 'temperature'],
+      heart: ['bpm', 'rr_modesum', 'rr_median', 'hrv'],
+      activity: ['activity_average', 'activity_max', 'activity_last_hour', 'impedance'],
+      raw: []
+    };
+
+    function updateCmdqTabs(){
+      document.querySelectorAll('[data-cmdq-tab]').forEach(button => {
+        const active = button.dataset.cmdqTab === cmdqActiveTab;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+    }
+
+    function setCmdqTab(tab){
+      if(!Object.prototype.hasOwnProperty.call(CMDQ_TAB_CHARTS, tab)) return;
+      cmdqActiveTab = tab;
+      updateCmdqTabs();
+      if(cmdqViewState) renderCmdqView();
+    }
+
+    function initCmdqTabs(){
+      document.querySelectorAll('[data-cmdq-tab]').forEach(button => {
+        button.setAttribute('role', 'tab');
+        button.onclick = () => setCmdqTab(button.dataset.cmdqTab);
+      });
+      updateCmdqTabs();
+    }
 
     function sampleCmdqPoints(points, target=1200){
       if(points.length <= target) return points;
@@ -3001,7 +3319,13 @@
         renderMetricTile('Average HRV', averageHrv == null ? '-' : fmtNumber(averageHrv, 2))
       ].join('');
 
-      CMDQ_CHARTS.forEach((config, idx) => {
+      const activeChartIds = CMDQ_TAB_CHARTS[cmdqActiveTab] || CMDQ_TAB_CHARTS.overview;
+      const activeCharts = CMDQ_CHARTS.filter(config => activeChartIds.includes(config.id));
+      const showRawTable = cmdqActiveTab === 'raw';
+      charts.classList.toggle('full-width', activeCharts.length <= 1);
+      tableHolder.style.display = showRawTable ? 'block' : 'none';
+
+      activeCharts.forEach((config, idx) => {
         const panelEl = document.createElement('div');
         panelEl.className = 'dashboard-panel';
         const canvasId = `cmdqChart_${idx}_${config.id}`;
@@ -3010,6 +3334,8 @@
         const canvas = document.getElementById(canvasId);
         if(canvas) renderCmdqChart(canvas, rows, config);
       });
+
+      if(!showRawTable) return;
 
       cmdqTableRef = new Tabulator('#cmdqTable', {
         data: rows,
@@ -3059,7 +3385,7 @@
 
         const rows = collectCmdqRows(all);
         const genBtn = document.getElementById('genCmdqBtn');
-        if(genBtn) genBtn.onclick = () => renderCmdqPanel(decodedOutput);
+        if(genBtn) genBtn.onclick = () => renderCmdqIfNeeded(true);
 
         if(!rows.length){
           cmdqViewState = null;
