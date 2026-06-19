@@ -314,6 +314,12 @@
       border-radius:8px;
       border:1px solid rgba(255,255,255,.08);
     }
+    .science-note{
+      margin:10px 0 0;
+      color:var(--muted);
+      font-size:12px;
+      line-height:1.45;
+    }
     @media (max-width: 900px){ .dashboard-grid{ grid-template-columns: 1fr; } }
     #renderingOverlay{
       position:fixed;
@@ -620,6 +626,45 @@
           <div id="mapStatsBox" style="margin-top:12px;"></div>
           <div id="mapTable" style="margin-top:12px;"></div>
           <p class="muted" style="margin-top:8px;">Tip: Map uses its own Port/From/To filters above.</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- === ACCELEROMETER (STATUS PORT 4) SECTION === -->
+    <details id="accelerometerCard" class="card">
+      <summary><span class="chev">▸</span> Accelerometer Motion</summary>
+      <div class="section-body">
+        <div id="accelerometerPanel" style="display:none;">
+          <div class="controls-grid">
+            <div class="control">
+              <label class="muted">&nbsp;</label>
+              <button id="genAccelerometerBtn" class="btn">Generate</button>
+            </div>
+            <div class="control">
+              <label class="muted">&nbsp;</label>
+              <button id="downloadAccelerometerBtn" class="btn secondary">Download Motion CSV</button>
+            </div>
+          </div>
+
+          <div id="accelerometerSummary" class="metric-strip"></div>
+          <p class="science-note">Dynamic body acceleration metrics are exploratory proxies for movement intensity. Interpretation depends on tag placement, sensor units, sampling rate, and species-specific validation.</p>
+
+          <div id="accelerometerTimeSliderWrapper" style="display:none;">
+            <label>Accelerometer time range</label>
+            <div class="dual-range" id="accelerometerTimeRangeSlider">
+              <div class="dual-range-track"></div>
+              <input id="accelerometerTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer start time" />
+              <input id="accelerometerTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer end time" />
+            </div>
+            <div id="accelerometerTimeSliderLabels" class="dim">
+              <span id="accelerometerTimeStartLabel"></span>
+              <strong id="accelerometerTimeCurrentLabel"></strong>
+              <span id="accelerometerTimeEndLabel"></span>
+            </div>
+          </div>
+
+          <div id="accelerometerCharts" class="dashboard-grid" style="margin-top:12px;"></div>
+          <div id="accelerometerTable" style="margin-top:12px;"></div>
         </div>
       </div>
     </details>
@@ -1047,6 +1092,8 @@
       document.getElementById("output").innerHTML = "";
       document.getElementById("analyticsPanel").style.display = "none";
       document.getElementById("mapPanel").style.display = "none"; // also hide Map until data ready
+      const accelerometerPanel = document.getElementById("accelerometerPanel");
+      if (accelerometerPanel) accelerometerPanel.style.display = "none";
       document.getElementById("bleScanPanel").style.display = "none";
       const cmdqPanel = document.getElementById("cmdqPanel");
       if (cmdqPanel) cmdqPanel.style.display = "none";
@@ -1327,7 +1374,8 @@
         numericFields,
         rawTableRows: null,
         cmdqRows: null,
-        bleScanRows: null
+        bleScanRows: null,
+        accelerometerRows: null
       };
       return decodedDataCache;
     }
@@ -1470,6 +1518,16 @@
       });
     }
 
+    function renderAccelerometerIfNeeded(force=false){
+      if(!hasDecodedResults()) return;
+      const panel = document.getElementById('accelerometerPanel');
+      if(!force && panel && panel.style.display === 'block'){
+        setTimeout(() => accelerometerChartRefs.forEach(chart => chart.resize()), 0);
+        return;
+      }
+      runWithRenderingBusy("Rendering accelerometer motion", "Calculating motion metrics from status messages...", () => renderAccelerometerPanel(decodedOutput, !accelerometerViewState));
+    }
+
     function renderBleScanIfNeeded(force=false){
       if(!hasDecodedResults()) return;
       const panel = document.getElementById('bleScanPanel');
@@ -1500,6 +1558,7 @@
     function initLazyRendering(){
       bindLazyCard('analyticsCard', () => renderAnalyticsIfNeeded(true));
       bindLazyCard('mapCard', showMapPanelIfNeeded);
+      bindLazyCard('accelerometerCard', renderAccelerometerIfNeeded);
       bindLazyCard('bleScanCard', renderBleScanIfNeeded);
       bindLazyCard('cmdqCard', renderCmdqIfNeeded);
       bindLazyCard('logMessagesCard', renderLogMessagesIfNeeded);
@@ -1513,6 +1572,8 @@
       if(genBleBtn){ genBleBtn.onclick = () => renderBleScanIfNeeded(true); }
       const genCmdqBtn = document.getElementById('genCmdqBtn');
       if(genCmdqBtn){ genCmdqBtn.onclick = () => renderCmdqIfNeeded(true); }
+      const genAccelerometerBtn = document.getElementById('genAccelerometerBtn');
+      if(genAccelerometerBtn){ genAccelerometerBtn.onclick = () => renderAccelerometerIfNeeded(true); }
       ['cmdqTimeStartSlider','cmdqTimeEndSlider'].forEach(id => {
         const slider = document.getElementById(id);
         if(!slider) return;
@@ -1521,6 +1582,15 @@
           updateCmdqSliderLabels();
         };
         slider.onchange = () => renderCmdqView();
+      });
+      ['accelerometerTimeStartSlider','accelerometerTimeEndSlider'].forEach(id => {
+        const slider = document.getElementById(id);
+        if(!slider) return;
+        slider.oninput = () => {
+          constrainAccelerometerTimeRange(id === 'accelerometerTimeStartSlider' ? 'start' : 'end');
+          updateAccelerometerSliderLabels();
+        };
+        slider.onchange = () => renderAccelerometerView();
       });
       ['startTime','endTime','mapStartTime','mapEndTime','bleStartTime','bleEndTime'].forEach((id) => {
         const input = document.getElementById(id);
@@ -1545,6 +1615,9 @@
     let mapViewState = null;
     let bleScanTableRef = null;
     let bleScanChartRef = null;
+    let accelerometerTableRef = null;
+    let accelerometerChartRefs = [];
+    let accelerometerViewState = null;
     let cmdqTableRef = null;
     let cmdqChartRefs = [];
     let cmdqViewState = null;
@@ -1561,6 +1634,7 @@
       if(aggTableRef){ try { aggTableRef.destroy(); } catch(e){} aggTableRef = null; }
       if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }
       if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
+      destroyAccelerometerDashboard();
       if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
       if(bleScanChartRef){ try { bleScanChartRef.destroy(); } catch(e){} bleScanChartRef = null; }
       destroyCmdqDashboard();
@@ -1568,6 +1642,7 @@
       if(mapTrackLayer) mapTrackLayer.clearLayers();
       analyticsCache = null;
       mapViewState = null;
+      accelerometerViewState = null;
       cmdqViewState = null;
       cmdqActiveTab = 'overview';
       cmdqRenderToken++;
@@ -2774,6 +2849,414 @@
           </table>`;
         el.innerHTML += html; el.style.display = 'block';
       }catch(err){ console.error('renderBundledSummary failed', err); }
+    }
+
+    // ---------- Accelerometer motion (status port 4) ----------
+    function destroyAccelerometerDashboard(){
+      accelerometerChartRefs.forEach(chart => { try { chart.destroy(); } catch(e){} });
+      accelerometerChartRefs = [];
+      if(accelerometerTableRef){ try { accelerometerTableRef.destroy(); } catch(e){} accelerometerTableRef = null; }
+    }
+
+    function firstFiniteNumber(obj, keys){
+      for(const key of keys){
+        if(!obj || !Object.prototype.hasOwnProperty.call(obj, key)) continue;
+        const value = Number(obj[key]);
+        if(Number.isFinite(value)) return value;
+      }
+      return null;
+    }
+
+    function rollingMean(rows, index, field, radius){
+      let sum = 0;
+      let count = 0;
+      const start = Math.max(0, index - radius);
+      const end = Math.min(rows.length - 1, index + radius);
+      for(let i = start; i <= end; i++){
+        const value = rows[i][field];
+        if(Number.isFinite(value)){ sum += value; count++; }
+      }
+      return count ? sum / count : 0;
+    }
+
+    function enrichAccelerometerRows(rows){
+      const radius = 2;
+      return (rows || []).map((row, index, allRows) => {
+        const sx = rollingMean(allRows, index, 'x', radius);
+        const sy = rollingMean(allRows, index, 'y', radius);
+        const sz = rollingMean(allRows, index, 'z', radius);
+        const dx = row.x - sx;
+        const dy = row.y - sy;
+        const dz = row.z - sz;
+        const magnitude = Math.sqrt(row.x * row.x + row.y * row.y + row.z * row.z);
+        const vedba = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const odba = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+        const pitch = Math.atan2(row.x, Math.sqrt(row.y * row.y + row.z * row.z)) * 180 / Math.PI;
+        const roll = Math.atan2(row.y, row.z || 0.000001) * 180 / Math.PI;
+        let jerk = null;
+        if(index > 0 && Number.isFinite(row.timestampMs) && Number.isFinite(allRows[index - 1].timestampMs)){
+          const previous = allRows[index - 1];
+          const dt = (row.timestampMs - previous.timestampMs) / 1000;
+          if(dt > 0){
+            const jx = row.x - previous.x;
+            const jy = row.y - previous.y;
+            const jz = row.z - previous.z;
+            jerk = Math.sqrt(jx * jx + jy * jy + jz * jz) / dt;
+          }
+        }
+        return { ...row, magnitude, static_x:sx, static_y:sy, static_z:sz, dynamic_x:dx, dynamic_y:dy, dynamic_z:dz, odba, vedba, jerk, pitch, roll };
+      });
+    }
+
+    function collectAccelerometerRowsFromMessageRows(messageRows){
+      const rows = [];
+      (messageRows || []).forEach(row => {
+        if(String(row.port) !== '4') return;
+        const data = row.dataObj || {};
+        const x = firstFiniteNumber(data, ['acc_x', 'x', 'accel_x', 'accelerometer_x']);
+        const y = firstFiniteNumber(data, ['acc_y', 'y', 'accel_y', 'accelerometer_y']);
+        const z = firstFiniteNumber(data, ['acc_z', 'z', 'accel_z', 'accelerometer_z']);
+        if(x == null || y == null || z == null) return;
+        const timestampMs = row.timestamp_utc ? Date.parse(row.timestamp_utc) : NaN;
+        rows.push({
+          timestamp_utc: row.timestamp_utc || '',
+          timestamp_local: row.timestamp_utc ? new Date(row.timestamp_utc).toLocaleString() : '',
+          timestampMs: Number.isFinite(timestampMs) ? timestampMs : null,
+          source_port: row.source_port,
+          x,
+          y,
+          z
+        });
+      });
+      rows.sort((a,b) => {
+        if(a.timestampMs == null) return b.timestampMs == null ? 0 : 1;
+        if(b.timestampMs == null) return -1;
+        return a.timestampMs - b.timestampMs;
+      });
+      return enrichAccelerometerRows(rows);
+    }
+
+    function collectAccelerometerRows(){
+      const cache = ensureDecodedDataCache();
+      if(!cache.accelerometerRows) cache.accelerometerRows = collectAccelerometerRowsFromMessageRows(cache.messageRows);
+      return cache.accelerometerRows;
+    }
+
+    function accelerometerValues(rows, field){
+      return (rows || []).map(row => row[field]).filter(Number.isFinite);
+    }
+
+    function accelerometerMean(rows, field){
+      const values = accelerometerValues(rows, field);
+      return values.length ? ss.mean(values) : null;
+    }
+
+    function accelerometerMax(rows, field){
+      const values = accelerometerValues(rows, field);
+      return values.length ? Math.max(...values) : null;
+    }
+
+    function accelerometerStd(rows, field){
+      const values = accelerometerValues(rows, field);
+      return values.length > 1 ? ss.standardDeviation(values) : 0;
+    }
+
+    function accelerometerDurationLabel(rows){
+      const first = rows.find(row => row.timestampMs != null);
+      const last = rows.slice().reverse().find(row => row.timestampMs != null);
+      if(!first || !last || last.timestampMs <= first.timestampMs) return '';
+      const seconds = (last.timestampMs - first.timestampMs) / 1000;
+      if(seconds < 120) return `${fmtNumber(seconds, 0)} s`;
+      if(seconds < 7200) return `${fmtNumber(seconds / 60, 1)} min`;
+      return `${fmtNumber(seconds / 3600, 1)} h`;
+    }
+
+    function dominantAccelerometerAxis(rows){
+      const axes = [
+        ['X', accelerometerMean(rows.map(row => ({ value: Math.abs(row.dynamic_x) })), 'value')],
+        ['Y', accelerometerMean(rows.map(row => ({ value: Math.abs(row.dynamic_y) })), 'value')],
+        ['Z', accelerometerMean(rows.map(row => ({ value: Math.abs(row.dynamic_z) })), 'value')]
+      ].filter(([, value]) => Number.isFinite(value));
+      if(!axes.length) return '-';
+      axes.sort((a,b) => b[1] - a[1]);
+      return axes[0][0];
+    }
+
+    function renderAccelerometerSummary(rows){
+      const summary = document.getElementById('accelerometerSummary');
+      if(!summary) return;
+      if(!rows.length){
+        summary.innerHTML = '<em>No accelerometer records found for the selected time range.</em>';
+        return;
+      }
+      const meanVedba = accelerometerMean(rows, 'vedba');
+      const peakVedba = accelerometerMax(rows, 'vedba');
+      const meanOdba = accelerometerMean(rows, 'odba');
+      const peakJerk = accelerometerMax(rows, 'jerk');
+      const postureSpread = Math.sqrt(Math.pow(accelerometerStd(rows, 'pitch') || 0, 2) + Math.pow(accelerometerStd(rows, 'roll') || 0, 2));
+      const highMotionThreshold = ss.quantileSorted(accelerometerValues(rows, 'vedba').sort((a,b)=>a-b), 0.75);
+      const highMotionPct = Number.isFinite(highMotionThreshold)
+        ? (rows.filter(row => Number.isFinite(row.vedba) && row.vedba >= highMotionThreshold).length / rows.length) * 100
+        : null;
+
+      summary.innerHTML = [
+        renderMetricTile('Samples', rows.length, accelerometerDurationLabel(rows)),
+        renderMetricTile('Mean VeDBA', meanVedba == null ? '-' : fmtNumber(meanVedba, 3), 'vector dynamic body acceleration'),
+        renderMetricTile('Peak VeDBA', peakVedba == null ? '-' : fmtNumber(peakVedba, 3)),
+        renderMetricTile('Mean ODBA', meanOdba == null ? '-' : fmtNumber(meanOdba, 3), 'overall dynamic body acceleration'),
+        renderMetricTile('Peak jerk', peakJerk == null ? '-' : fmtNumber(peakJerk, 3), 'change in acceleration per second'),
+        renderMetricTile('Dominant motion axis', dominantAccelerometerAxis(rows)),
+        renderMetricTile('Posture spread', fmtNumber(postureSpread, 1) + ' deg', 'pitch/roll variability'),
+        renderMetricTile('High-motion share', highMotionPct == null ? '-' : `${fmtNumber(highMotionPct, 1)}%`, 'above visible-window P75 VeDBA')
+      ].join('');
+    }
+
+    function sampleAccelerometerPoints(points, target=1600){
+      if(points.length <= target) return points;
+      const bucketSize = Math.ceil(points.length / Math.max(1, Math.floor(target / 3)));
+      const sampled = [];
+      for(let i = 0; i < points.length; i += bucketSize){
+        const bucket = points.slice(i, i + bucketSize);
+        if(!bucket.length) continue;
+        let minPoint = bucket[0];
+        let maxPoint = bucket[0];
+        bucket.forEach(point => {
+          if(point.y < minPoint.y) minPoint = point;
+          if(point.y > maxPoint.y) maxPoint = point;
+        });
+        [bucket[0], minPoint, maxPoint, bucket[bucket.length - 1]].forEach(point => {
+          const prev = sampled[sampled.length - 1];
+          if(!prev || prev.x !== point.x || prev.y !== point.y) sampled.push(point);
+        });
+      }
+      return sampled.sort((a,b) => a.x - b.x);
+    }
+
+    function makeAccelerometerDataset(rows, field, label, color){
+      const points = rows
+        .filter(row => row.timestampMs != null && Number.isFinite(row[field]))
+        .map(row => ({ x: row.timestampMs, y: row[field] }));
+      return {
+        label,
+        data: sampleAccelerometerPoints(points),
+        parsing:false,
+        borderColor:color,
+        backgroundColor:color,
+        pointRadius:points.length > 600 ? 0 : 2,
+        pointHoverRadius:3,
+        borderWidth:2,
+        tension:0
+      };
+    }
+
+    function renderAccelerometerChart(holder, title, datasets, yTitle){
+      const panel = document.createElement('div');
+      panel.className = 'dashboard-panel';
+      const canvas = document.createElement('canvas');
+      const chartWrap = document.createElement('div');
+      chartWrap.className = 'dashboard-chart';
+      const heading = document.createElement('h3');
+      heading.textContent = title;
+      chartWrap.appendChild(canvas);
+      panel.appendChild(heading);
+      panel.appendChild(chartWrap);
+      holder.appendChild(panel);
+      const chart = new Chart(canvas.getContext('2d'), {
+        type:'line',
+        data:{ datasets },
+        options:{
+          parsing:false,
+          responsive:true,
+          maintainAspectRatio:false,
+          interaction:{ mode:'nearest', intersect:false },
+          scales:{
+            x:{ type:'time', title:{ display:true, text:'Time' } },
+            y:{ type:'linear', title:{ display:true, text:yTitle } }
+          },
+          plugins:{
+            legend:{ display:true, position:'bottom' },
+            tooltip:{
+              callbacks:{
+                title:(items) => {
+                  const x = items[0]?.parsed?.x;
+                  return Number.isFinite(x) ? new Date(x).toLocaleString() : '';
+                },
+                label:(item) => `${item.dataset.label}: ${fmtNumber(item.parsed.y, 3)}`
+              }
+            }
+          }
+        }
+      });
+      accelerometerChartRefs.push(chart);
+    }
+
+    function renderAccelerometerCharts(rows){
+      const holder = document.getElementById('accelerometerCharts');
+      if(!holder) return;
+      holder.innerHTML = '';
+      holder.classList.remove('full-width');
+      if(!rows.length) return;
+      renderAccelerometerChart(holder, 'Acceleration by axis', [
+        makeAccelerometerDataset(rows, 'x', 'X axis', '#2563eb'),
+        makeAccelerometerDataset(rows, 'y', 'Y axis', '#16a34a'),
+        makeAccelerometerDataset(rows, 'z', 'Z axis', '#dc2626')
+      ], 'Acceleration (sensor units)');
+      renderAccelerometerChart(holder, 'Dynamic body acceleration', [
+        makeAccelerometerDataset(rows, 'vedba', 'VeDBA', '#7e22ce'),
+        makeAccelerometerDataset(rows, 'odba', 'ODBA', '#c2410c')
+      ], 'Dynamic acceleration');
+      renderAccelerometerChart(holder, 'Jerk', [
+        makeAccelerometerDataset(rows, 'jerk', 'Jerk', '#0891b2')
+      ], 'Acceleration change / second');
+      renderAccelerometerChart(holder, 'Posture proxy', [
+        makeAccelerometerDataset(rows, 'pitch', 'Pitch', '#9333ea'),
+        makeAccelerometerDataset(rows, 'roll', 'Roll', '#0f766e')
+      ], 'Degrees');
+    }
+
+    function renderAccelerometerTable(rows){
+      const holder = document.getElementById('accelerometerTable');
+      if(!holder) return;
+      holder.innerHTML = '';
+      if(accelerometerTableRef){ try { accelerometerTableRef.destroy(); } catch(e){} accelerometerTableRef = null; }
+      if(!rows.length) return;
+      accelerometerTableRef = new Tabulator('#accelerometerTable', {
+        data: rows,
+        layout:'fitColumns',
+        height:'320px',
+        pagination:'local',
+        paginationSize:100,
+        paginationSizeSelector:[50, 100, 250, 500],
+        columns:[
+          { title:'Timestamp (UTC)', field:'timestamp_utc', visible:false },
+          { title:'Timestamp (local)', field:'timestamp_local', minWidth:160 },
+          { title:'X', field:'x', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
+          { title:'Y', field:'y', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
+          { title:'Z', field:'z', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
+          { title:'Magnitude', field:'magnitude', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
+          { title:'VeDBA', field:'vedba', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
+          { title:'ODBA', field:'odba', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
+          { title:'Jerk', field:'jerk', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
+          { title:'Pitch', field:'pitch', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 1) },
+          { title:'Roll', field:'roll', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 1) }
+        ],
+        initialSort:[{ column:'timestamp_utc', dir:'asc' }]
+      });
+    }
+
+    function constrainAccelerometerTimeRange(changedHandle){
+      const startSlider = document.getElementById('accelerometerTimeStartSlider');
+      const endSlider = document.getElementById('accelerometerTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+      if(Number(startSlider.value) > Number(endSlider.value)){
+        if(changedHandle === 'start') endSlider.value = startSlider.value;
+        else startSlider.value = endSlider.value;
+      }
+    }
+
+    function updateAccelerometerTimeRangeVisual(){
+      const startSlider = document.getElementById('accelerometerTimeStartSlider');
+      const endSlider = document.getElementById('accelerometerTimeEndSlider');
+      const rangeSlider = document.getElementById('accelerometerTimeRangeSlider');
+      if(!startSlider || !endSlider || !rangeSlider) return;
+      const max = Number(endSlider.max);
+      const startPercent = max > 0 ? (Number(startSlider.value) / max) * 100 : 0;
+      const endPercent = max > 0 ? (Number(endSlider.value) / max) * 100 : 100;
+      rangeSlider.style.setProperty('--range-start', `${startPercent}%`);
+      rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
+    }
+
+    function getAccelerometerVisibleRows(){
+      if(!accelerometerViewState) return { rows: [], startIndex: 0, endIndex: 0, total: 0 };
+      const rows = accelerometerViewState.rows || [];
+      const maxIndex = Math.max(0, rows.length - 1);
+      const startSlider = document.getElementById('accelerometerTimeStartSlider');
+      const endSlider = document.getElementById('accelerometerTimeEndSlider');
+      const startIndex = Math.max(0, Math.min(maxIndex, startSlider ? Number(startSlider.value) : 0));
+      const endIndex = Math.max(startIndex, Math.min(maxIndex, endSlider ? Number(endSlider.value) : maxIndex));
+      return { rows: rows.slice(startIndex, endIndex + 1), startIndex, endIndex, total: rows.length };
+    }
+
+    function updateAccelerometerSliderLabels(){
+      const visible = getAccelerometerVisibleRows();
+      const rows = visible.rows;
+      const startLabel = document.getElementById('accelerometerTimeStartLabel');
+      const endLabel = document.getElementById('accelerometerTimeEndLabel');
+      const currentLabel = document.getElementById('accelerometerTimeCurrentLabel');
+      if(startLabel) startLabel.textContent = rows[0]?.timestamp_local || 'Unknown time';
+      if(endLabel) endLabel.textContent = rows[rows.length - 1]?.timestamp_local || 'Unknown time';
+      if(currentLabel) currentLabel.textContent = `${rows.length}/${visible.total} records`;
+      updateAccelerometerTimeRangeVisual();
+    }
+
+    function renderAccelerometerDashboardRows(rows){
+      destroyAccelerometerDashboard();
+      renderAccelerometerSummary(rows);
+      renderAccelerometerCharts(rows);
+      renderAccelerometerTable(rows);
+    }
+
+    function renderAccelerometerView(){
+      if(!accelerometerViewState) return;
+      const visible = getAccelerometerVisibleRows();
+      updateAccelerometerSliderLabels();
+      renderAccelerometerDashboardRows(visible.rows);
+    }
+
+    function renderAccelerometerPanel(all, resetRange=false){
+      try{
+        const panel = document.getElementById('accelerometerPanel');
+        const sliderWrapper = document.getElementById('accelerometerTimeSliderWrapper');
+        if(!panel) return;
+        const rows = collectAccelerometerRows(all);
+        const downloadBtn = document.getElementById('downloadAccelerometerBtn');
+        if(downloadBtn) downloadBtn.onclick = downloadAccelerometerCSV;
+        panel.style.display = 'block';
+        if(!rows.length){
+          accelerometerViewState = null;
+          if(sliderWrapper) sliderWrapper.style.display = 'none';
+          renderAccelerometerDashboardRows([]);
+          return;
+        }
+        accelerometerViewState = { rows };
+        const startSlider = document.getElementById('accelerometerTimeStartSlider');
+        const endSlider = document.getElementById('accelerometerTimeEndSlider');
+        if(sliderWrapper) sliderWrapper.style.display = 'block';
+        if(startSlider && endSlider){
+          startSlider.min = endSlider.min = '0';
+          startSlider.max = endSlider.max = String(rows.length - 1);
+          if(resetRange || Number(startSlider.max) !== rows.length - 1){
+            startSlider.value = '0';
+            endSlider.value = endSlider.max;
+          }
+          startSlider.disabled = endSlider.disabled = rows.length <= 1;
+        }
+        renderAccelerometerView();
+      }catch(err){
+        console.error('renderAccelerometerPanel failed', err);
+      }
+    }
+
+    function buildAccelerometerCSV(rows){
+      const header = ['timestamp_utc','timestamp_local','source_port','x','y','z','magnitude','vedba','odba','jerk','pitch','roll'];
+      const lines = [header.join(',')];
+      (rows || []).forEach(row => {
+        lines.push(header.map(key => csvEscape(row[key] == null ? '' : row[key])).join(','));
+      });
+      return lines.join('\n');
+    }
+
+    function downloadAccelerometerCSV(){
+      const visible = getAccelerometerVisibleRows();
+      const rows = visible.rows && visible.rows.length ? visible.rows : collectAccelerometerRows();
+      if(!rows.length){ showError('No accelerometer data to download.'); return; }
+      const blob = new Blob([buildAccelerometerCSV(rows)], { type:'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (logFileName || 'decoded') + '_accelerometer_motion.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     function normalizeMacTail(mac){
