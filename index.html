@@ -64,6 +64,28 @@
     #mapTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
+    #mapWrapper:fullscreen{
+      background:var(--bg);
+      padding:12px;
+      box-sizing:border-box;
+    }
+    #mapWrapper:fullscreen #map{
+      display:block !important;
+      height:calc(100vh - 24px);
+      margin:0;
+      border-radius:8px;
+    }
+    #mapWrapper:-webkit-full-screen{
+      background:var(--bg);
+      padding:12px;
+      box-sizing:border-box;
+    }
+    #mapWrapper:-webkit-full-screen #map{
+      display:block !important;
+      height:calc(100vh - 24px);
+      margin:0;
+      border-radius:8px;
+    }
 
     /* Outlier controls */
     .range-values{ display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; }
@@ -599,6 +621,10 @@
             <div class="control">
               <label class="muted">&nbsp;</label>
               <button id="downloadMapBtn" class="btn secondary">Download Map CSV</button>
+            </div>
+            <div class="control">
+              <label class="muted">&nbsp;</label>
+              <button id="fullscreenMapBtn" class="btn secondary">Open Map Full Screen</button>
             </div>
           </div>
 
@@ -1579,6 +1605,7 @@
       initLazyRendering();
       initCmdqTabs();
       initMapTabs();
+      initMapFullscreen();
       const genBleBtn = document.getElementById('genBleBtn');
       if(genBleBtn){ genBleBtn.onclick = () => renderBleScanIfNeeded(true); }
       const genCmdqBtn = document.getElementById('genCmdqBtn');
@@ -2500,6 +2527,61 @@
       updateMapTabs();
     }
 
+    function getFullscreenElement(){
+      return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || null;
+    }
+
+    function isMapFullscreen(){
+      return getFullscreenElement() === document.getElementById('mapWrapper');
+    }
+
+    function updateMapFullscreenButton(){
+      const button = document.getElementById('fullscreenMapBtn');
+      if(!button) return;
+      button.textContent = isMapFullscreen() ? 'Exit Full Screen' : 'Open Map Full Screen';
+      button.disabled = !document.getElementById('mapWrapper') || document.getElementById('mapWrapper').style.display === 'none';
+    }
+
+    function resizeMapSoon(){
+      setTimeout(() => {
+        if(mapRef) mapRef.invalidateSize();
+      }, 120);
+    }
+
+    function toggleMapFullscreen(){
+      const wrapper = document.getElementById('mapWrapper');
+      if(!wrapper || wrapper.style.display === 'none'){
+        showError('Generate the map before opening it full screen.');
+        return;
+      }
+      if(isMapFullscreen()){
+        const exit = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+        if(exit) exit.call(document);
+        return;
+      }
+      const request = wrapper.requestFullscreen || wrapper.webkitRequestFullscreen || wrapper.msRequestFullscreen;
+      if(!request){
+        showError('Full screen mode is not supported by this browser.');
+        return;
+      }
+      const result = request.call(wrapper);
+      if(result && typeof result.catch === 'function'){
+        result.catch(err => showError('Opening full screen failed: ' + err.message));
+      }
+    }
+
+    function initMapFullscreen(){
+      const button = document.getElementById('fullscreenMapBtn');
+      if(button) button.onclick = toggleMapFullscreen;
+      ['fullscreenchange','webkitfullscreenchange','MSFullscreenChange'].forEach(eventName => {
+        document.addEventListener(eventName, () => {
+          updateMapFullscreenButton();
+          resizeMapSoon();
+        });
+      });
+      updateMapFullscreenButton();
+    }
+
     function destroyMapCharts(){
       mapChartRefs.forEach(chart => { try { chart.destroy(); } catch(e){} });
       mapChartRefs = [];
@@ -3229,6 +3311,7 @@
       if(mapEl) mapEl.style.display = 'none';
       if(mapWrapper) mapWrapper.style.display = 'none';
       if(msgEl) msgEl.textContent = '';
+      updateMapFullscreenButton();
       setMapMetrics('');
       setMapAnalysisNote('');
       setMapStatsHtml('');
@@ -3309,12 +3392,14 @@
           mapTrackLayer.clearLayers();
           if(mapHeatLayer) mapHeatLayer.clearLayers();
         }
+        updateMapFullscreenButton();
         return;
       }
 
       // Show map now that we have data
       if(mapEl) mapEl.style.display = 'block';
       if(mapWrapper) mapWrapper.style.display = 'block';
+      updateMapFullscreenButton();
       mapViewState = { points, totalLocationMessages, zeroCoordinateCount, track };
 
       const startSlider = document.getElementById('mapTimeStartSlider');
