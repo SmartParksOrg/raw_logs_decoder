@@ -3469,6 +3469,41 @@
       return grid;
     }
 
+    function mapPointPopupHtml(point, heading=''){
+      const accuracyLabel = point.horizontalAccuracy == null
+        ? ''
+        : `<br>Horizontal accuracy estimate: ${fmtNumber(point.horizontalAccuracy)} m`;
+      const title = heading ? `<strong>${heading}</strong><br>` : '';
+      return `${title}${point.tsLabel}<br>${point.lat.toFixed(6)}, ${point.lon.toFixed(6)}${accuracyLabel}`;
+    }
+
+    function addClickableMapPoint(point, visualOptions, popupHtml){
+      const latLng = [point.lat, point.lon];
+      const visualRadius = Number(visualOptions.radius) || 3;
+      const hitRadius = Math.max(12, visualRadius + 8);
+      const hitTarget = L.circleMarker(latLng, {
+        radius: hitRadius,
+        fill: true,
+        fillColor: '#000000',
+        fillOpacity: 0,
+        color: '#000000',
+        opacity: 0,
+        weight: 0,
+        stroke: false,
+        renderer: mapCanvasRenderer
+      });
+      const dot = L.circleMarker(latLng, {
+        ...visualOptions,
+        renderer: mapCanvasRenderer
+      });
+      if(popupHtml){
+        hitTarget.bindPopup(popupHtml);
+        dot.bindPopup(popupHtml);
+      }
+      mapPointsLayer.addLayer(hitTarget);
+      mapPointsLayer.addLayer(dot);
+    }
+
     function renderTrackMap(visiblePoints, latestPoint, totalLocationMessages, zeroCoordinateCount){
       const layers = getMapLayerVisibility();
       renderMapTable(visiblePoints.map(p => ({
@@ -3485,20 +3520,14 @@
       if(layers.points){
         visiblePoints.forEach(p => {
           const isLatest = p === latestPoint;
-          const accuracyLabel = p.horizontalAccuracy == null
-            ? ''
-            : `<br>Horizontal accuracy estimate: ${fmtNumber(p.horizontalAccuracy)} m`;
-          const latestLabel = isLatest ? '<strong>Latest location</strong><br>' : '';
-          const dot = L.circleMarker([p.lat, p.lon], {
+          addClickableMapPoint(p, {
             radius: isLatest ? 7 : 3,
             fillColor: isLatest ? '#ff8c00' : '#3388ff',
             fillOpacity: isLatest ? 0.95 : 0.35,
             color: isLatest ? '#ffffff' : '#3388ff',
             weight: isLatest ? 2 : 0,
-            stroke: isLatest,
-            renderer: mapCanvasRenderer
-          }).bindPopup(`${latestLabel}${p.tsLabel}<br>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}${accuracyLabel}`);
-          mapPointsLayer.addLayer(dot);
+            stroke: isLatest
+          }, mapPointPopupHtml(p, isLatest ? 'Latest location' : 'GPS fix'));
         });
       }
 
@@ -3514,14 +3543,13 @@
       const grid = layers.heatmap ? drawSpaceUseHeatmap(visiblePoints) : buildSpaceUseGrid(visiblePoints);
       if(layers.points){
         visiblePoints.forEach(p => {
-          mapPointsLayer.addLayer(L.circleMarker([p.lat, p.lon], {
+          addClickableMapPoint(p, {
             radius: 2,
             fillColor: '#111827',
             fillOpacity: 0.35,
             color: '#ffffff',
-            weight: 0,
-            renderer: mapCanvasRenderer
-          }));
+            weight: 0
+          }, mapPointPopupHtml(p, 'GPS fix'));
         });
       }
       const topCell = grid.cells[0];
@@ -3561,14 +3589,13 @@
       }
       if(layers.points){
         visiblePoints.forEach(point => {
-          mapPointsLayer.addLayer(L.circleMarker([point.lat, point.lon], {
+          addClickableMapPoint(point, {
             radius:3,
             fillColor:'#2563eb',
             fillOpacity:0.35,
             color:'#2563eb',
-            weight:0,
-            renderer:mapCanvasRenderer
-          }));
+            weight:0
+          }, mapPointPopupHtml(point, 'GPS fix'));
         });
       }
       setMapMetrics([
@@ -3659,14 +3686,13 @@
       }
       if(layers.points){
         visiblePoints.forEach(point => {
-          mapPointsLayer.addLayer(L.circleMarker([point.lat, point.lon], {
+          addClickableMapPoint(point, {
             radius:3,
             fillColor:'#2563eb',
             fillOpacity:0.35,
             color:'#2563eb',
-            weight:0,
-            renderer:mapCanvasRenderer
-          }));
+            weight:0
+          }, mapPointPopupHtml(point, 'GPS fix'));
         });
       }
 
