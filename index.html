@@ -62,6 +62,51 @@
     #mapMessage { margin-top:10px; }
     #mapTimeSliderWrapper{ margin-top:12px; }
     #mapTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
+    .time-slider-row{
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) auto;
+      gap:8px;
+      align-items:center;
+    }
+    .time-scale-row{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-top:8px;
+      flex-wrap:wrap;
+    }
+    .time-scale-reset{
+      appearance:none;
+      border:1px solid rgba(17,24,39,.16);
+      border-radius:6px;
+      background:var(--bg-elev);
+      color:var(--text);
+      width:30px;
+      height:28px;
+      margin:0;
+      padding:0;
+      display:grid;
+      place-items:center;
+      cursor:pointer;
+    }
+    .time-scale-reset svg{ width:16px; height:16px; stroke:currentColor; }
+    .time-scale-reset:disabled{
+      opacity:.35;
+      cursor:not-allowed;
+    }
+    .time-marker-canvas{
+      position:absolute;
+      left:0;
+      right:0;
+      top:0;
+      width:100%;
+      height:28px;
+      pointer-events:none;
+      z-index:1;
+    }
+    .dual-range input[type="range"]{ z-index:2; }
+    #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:#0f766e; }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
     .map-tools-control{
@@ -170,7 +215,8 @@
       backdrop-filter:blur(6px);
     }
     #mapWrapper:fullscreen .map-fullscreen-time-control,
-    #mapWrapper:-webkit-full-screen .map-fullscreen-time-control{
+    #mapWrapper:-webkit-full-screen .map-fullscreen-time-control,
+    #mapWrapper.map-screenshot-capture .map-fullscreen-time-control{
       display:block;
     }
     .map-fullscreen-time-title{
@@ -240,7 +286,7 @@
       position:absolute; left:0; right:0; top:12px; height:4px; border-radius:999px;
       background:linear-gradient(to right,
         rgba(255,255,255,.18) 0 var(--range-start),
-        var(--brand) var(--range-start) var(--range-end),
+        var(--range-selected-color, var(--brand)) var(--range-start) var(--range-end),
         rgba(255,255,255,.18) var(--range-end) 100%);
     }
     .dual-range input[type="range"]{
@@ -782,10 +828,19 @@
                 <span>Time range</span>
                 <strong id="mapFullscreenTimeCurrentLabel"></strong>
               </div>
-              <div class="dual-range" id="mapFullscreenTimeRangeSlider">
-                <div class="dual-range-track"></div>
-                <input id="mapFullscreenTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map start time" />
-                <input id="mapFullscreenTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map end time" />
+              <div class="time-slider-row">
+                <div class="dual-range" id="mapFullscreenTimeRangeSlider">
+                  <div class="dual-range-track"></div>
+                  <canvas id="mapFullscreenTimeMarkers" class="time-marker-canvas" aria-hidden="true"></canvas>
+                  <input id="mapFullscreenTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map start time" />
+                  <input id="mapFullscreenTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map end time" />
+                </div>
+                <button type="button" id="mapFullscreenTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
               </div>
               <div class="map-fullscreen-time-labels">
                 <span id="mapFullscreenTimeStartLabel"></span>
@@ -796,15 +851,27 @@
 
           <div id="mapTimeSliderWrapper" style="display:none;">
             <label>Map time range</label>
-            <div class="dual-range" id="mapTimeRangeSlider">
-              <div class="dual-range-track"></div>
-              <input id="mapTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map start time" />
-              <input id="mapTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map end time" />
+            <div class="time-slider-row">
+              <div class="dual-range" id="mapTimeRangeSlider">
+                <div class="dual-range-track"></div>
+                <canvas id="mapTimeMarkers" class="time-marker-canvas" aria-hidden="true"></canvas>
+                <input id="mapTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map start time" />
+                <input id="mapTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map end time" />
+              </div>
+              <button type="button" id="mapTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
             </div>
             <div id="mapTimeSliderLabels" class="dim">
               <span id="mapTimeStartLabel"></span>
               <strong id="mapTimeCurrentLabel"></strong>
               <span id="mapTimeEndLabel"></span>
+            </div>
+            <div class="time-scale-row">
+              <span id="mapTimeScaleLabel" class="dim"></span>
             </div>
             <div class="map-latest-legend dim"><span class="map-latest-dot"></span> Latest visible location</div>
           </div>
@@ -1961,7 +2028,7 @@
           constrainMapTimeRange(id === 'mapTimeStartSlider' ? 'start' : 'end');
           updateMapSliderLabels();
         };
-        slider.onchange = () => renderMapView(false);
+        slider.onchange = () => commitMapTimeSelection();
       });
       ['mapFullscreenTimeStartSlider','mapFullscreenTimeEndSlider'].forEach(id => {
         const slider = document.getElementById(id);
@@ -1970,8 +2037,12 @@
           syncMapTimeSlidersFromFullscreen(id === 'mapFullscreenTimeStartSlider' ? 'start' : 'end');
           updateMapSliderLabels();
         };
-        slider.onchange = () => renderMapView(false);
+        slider.onchange = () => commitMapTimeSelection();
       });
+      const mapTimeResetScaleBtn = document.getElementById('mapTimeResetScaleBtn');
+      if(mapTimeResetScaleBtn) mapTimeResetScaleBtn.onclick = () => resetMapSliderScale();
+      const mapFullscreenTimeResetScaleBtn = document.getElementById('mapFullscreenTimeResetScaleBtn');
+      if(mapFullscreenTimeResetScaleBtn) mapFullscreenTimeResetScaleBtn.onclick = () => resetMapSliderScale();
 
       // Recalculate ranges when fields or row-level filters change.
       if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
@@ -2949,8 +3020,10 @@
       setRenderingBusy(true, 'Preparing map screenshot', 'Capturing the current map view as PNG...');
       try{
         if(mapRef) mapRef.invalidateSize();
+        wrapper.classList.add('map-screenshot-capture');
+        updateMapSliderLabels();
         await waitForNextPaint();
-        const canvas = await html2canvas(mapEl, {
+        const canvas = await html2canvas(wrapper, {
           useCORS: true,
           allowTaint: false,
           backgroundColor: null,
@@ -2970,6 +3043,8 @@
       }catch(err){
         showError('Map screenshot failed: ' + (err && err.message ? err.message : String(err)));
       }finally{
+        wrapper.classList.remove('map-screenshot-capture');
+        updateMapSliderLabels();
         setRenderingBusy(false);
         updateMapActionButtons();
       }
@@ -3572,6 +3647,99 @@
       }
     }
 
+    function mapSliderUsesTimestamps(){
+      return !!mapViewState?.points?.length && mapViewState.points.every(point => Number.isFinite(point.timestampMs));
+    }
+
+    function mapSliderValueForPoint(index){
+      const point = mapViewState?.points?.[index];
+      return mapSliderUsesTimestamps() && point ? point.timestampMs : index;
+    }
+
+    function getMapSliderScaleIndexes(){
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
+      if(!startSlider || !endSlider) return { minIndex: 0, maxIndex: 0 };
+      return {
+        minIndex: Number(startSlider.dataset.scaleMinIndex) || 0,
+        maxIndex: Number(endSlider.dataset.scaleMaxIndex) || 0
+      };
+    }
+
+    function setMapSliderScale(minIndex, maxIndex, resetSelection=false){
+      if(!mapViewState) return;
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+
+      const maxPointIndex = Math.max(0, mapViewState.points.length - 1);
+      const min = Math.max(0, Math.min(maxPointIndex, Math.floor(minIndex)));
+      const max = Math.max(min, Math.min(maxPointIndex, Math.ceil(maxIndex)));
+      const minValue = mapSliderValueForPoint(min);
+      const maxValue = mapSliderValueForPoint(max);
+      const currentStart = resetSelection ? minValue : Math.max(minValue, Math.min(maxValue, Number(startSlider.value) || minValue));
+      const currentEnd = resetSelection ? maxValue : Math.max(currentStart, Math.min(maxValue, Number(endSlider.value) || maxValue));
+
+      startSlider.min = endSlider.min = String(minValue);
+      startSlider.max = endSlider.max = String(maxValue);
+      startSlider.value = String(currentStart);
+      endSlider.value = String(currentEnd);
+      startSlider.dataset.scaleMinIndex = endSlider.dataset.scaleMinIndex = String(min);
+      startSlider.dataset.scaleMaxIndex = endSlider.dataset.scaleMaxIndex = String(max);
+      syncMapFullscreenSlidersFromMain();
+      updateMapSliderLabels();
+    }
+
+    function resetMapSliderScale(){
+      if(!mapViewState) return;
+      setMapSliderScale(0, mapViewState.points.length - 1);
+      renderMapView(false);
+    }
+
+    function zoomMapSliderToSelection(){
+      if(!mapViewState) return;
+      const visible = getMapVisiblePoints();
+      if(visible.endIndex <= visible.startIndex) return false;
+      setMapSliderScale(visible.startIndex, visible.endIndex);
+      return true;
+    }
+
+    function commitMapTimeSelection(){
+      if(!mapViewState) return;
+      zoomMapSliderToSelection();
+      renderMapView(false);
+    }
+
+    function updateMapSliderScaleControls(){
+      const label = document.getElementById('mapTimeScaleLabel');
+      const resetBtns = [
+        document.getElementById('mapTimeResetScaleBtn'),
+        document.getElementById('mapFullscreenTimeResetScaleBtn')
+      ].filter(Boolean);
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
+      if(!mapViewState || !startSlider || !endSlider){
+        if(label) label.textContent = '';
+        resetBtns.forEach(btn => { btn.disabled = true; });
+        return;
+      }
+
+      const points = mapViewState.points;
+      const { minIndex, maxIndex } = getMapSliderScaleIndexes();
+      const fullMax = Math.max(0, points.length - 1);
+      const isFullScale = minIndex <= 0 && maxIndex >= fullMax;
+      const scaleStart = points[minIndex];
+      const scaleEnd = points[maxIndex];
+
+      if(label){
+        const scaleText = isFullScale
+          ? 'Slider scale: full range'
+          : `Slider scale: ${scaleStart?.tsLabel || 'Unknown time'} to ${scaleEnd?.tsLabel || 'Unknown time'}`;
+        label.textContent = scaleText;
+      }
+      resetBtns.forEach(btn => { btn.disabled = isFullScale; });
+    }
+
     function syncMapFullscreenSlidersFromMain(){
       const mainStart = document.getElementById('mapTimeStartSlider');
       const mainEnd = document.getElementById('mapTimeEndSlider');
@@ -3582,10 +3750,14 @@
       fsStart.max = mainStart.max;
       fsStart.value = mainStart.value;
       fsStart.disabled = mainStart.disabled;
+      fsStart.dataset.scaleMinIndex = mainStart.dataset.scaleMinIndex || '0';
+      fsStart.dataset.scaleMaxIndex = mainStart.dataset.scaleMaxIndex || mainStart.max;
       fsEnd.min = mainEnd.min;
       fsEnd.max = mainEnd.max;
       fsEnd.value = mainEnd.value;
       fsEnd.disabled = mainEnd.disabled;
+      fsEnd.dataset.scaleMinIndex = mainEnd.dataset.scaleMinIndex || '0';
+      fsEnd.dataset.scaleMaxIndex = mainEnd.dataset.scaleMaxIndex || mainEnd.max;
     }
 
     function syncMapTimeSlidersFromFullscreen(changedHandle){
@@ -3604,14 +3776,76 @@
       syncMapFullscreenSlidersFromMain();
     }
 
+    function pointPositionOnMapTimeScale(point, index, minIndex, maxIndex){
+      const points = mapViewState?.points || [];
+      const scaleStartMs = points[minIndex]?.timestampMs;
+      const scaleEndMs = points[maxIndex]?.timestampMs;
+      if(Number.isFinite(point?.timestampMs) && Number.isFinite(scaleStartMs) && Number.isFinite(scaleEndMs) && scaleEndMs > scaleStartMs){
+        return (point.timestampMs - scaleStartMs) / (scaleEndMs - scaleStartMs);
+      }
+      const span = maxIndex - minIndex;
+      return span > 0 ? (index - minIndex) / span : 0.5;
+    }
+
+    function drawMapTimeMarkerCanvas(canvas, minIndex, maxIndex, startIndex, endIndex){
+      if(!canvas || !mapViewState) return;
+      const rect = canvas.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height || 28));
+      const dpr = window.devicePixelRatio || 1;
+      const targetWidth = Math.round(width * dpr);
+      const targetHeight = Math.round(height * dpr);
+      if(canvas.width !== targetWidth) canvas.width = targetWidth;
+      if(canvas.height !== targetHeight) canvas.height = targetHeight;
+
+      const ctx = canvas.getContext('2d');
+      if(!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const points = mapViewState.points || [];
+      if(!points.length || maxIndex < minIndex) return;
+
+      const first = Math.max(0, Math.min(points.length - 1, minIndex));
+      const last = Math.max(first, Math.min(points.length - 1, maxIndex));
+      const y = height - 4;
+      const radius = 1.8;
+
+      for(let i = first; i <= last; i++){
+        const point = points[i];
+        const ratio = Math.max(0, Math.min(1, pointPositionOnMapTimeScale(point, i, first, last)));
+        const x = ratio * width;
+        const selected = i >= startIndex && i <= endIndex;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = selected ? 'rgba(249,115,22,.78)' : 'rgba(17,24,39,.22)';
+        ctx.fill();
+      }
+    }
+
+    function updateMapTimeMarkers(){
+      if(!mapViewState) return;
+      const startSlider = document.getElementById('mapTimeStartSlider');
+      const endSlider = document.getElementById('mapTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+      const { minIndex, maxIndex } = getMapSliderScaleIndexes();
+      const visible = getMapVisiblePoints();
+      const startIndex = visible.points.length ? visible.startIndex : 1;
+      const endIndex = visible.points.length ? visible.endIndex : 0;
+      drawMapTimeMarkerCanvas(document.getElementById('mapTimeMarkers'), minIndex, maxIndex, startIndex, endIndex);
+      drawMapTimeMarkerCanvas(document.getElementById('mapFullscreenTimeMarkers'), minIndex, maxIndex, startIndex, endIndex);
+    }
+
     function updateMapTimeRangeVisual(){
       const startSlider = document.getElementById('mapTimeStartSlider');
       const endSlider = document.getElementById('mapTimeEndSlider');
       const rangeSlider = document.getElementById('mapTimeRangeSlider');
       if(!startSlider || !endSlider || !rangeSlider) return;
+      const min = Number(startSlider.min);
       const max = Number(endSlider.max);
-      const startPercent = max > 0 ? (Number(startSlider.value) / max) * 100 : 0;
-      const endPercent = max > 0 ? (Number(endSlider.value) / max) * 100 : 100;
+      const span = max - min;
+      const startPercent = span > 0 ? ((Number(startSlider.value) - min) / span) * 100 : 0;
+      const endPercent = span > 0 ? ((Number(endSlider.value) - min) / span) * 100 : 100;
       rangeSlider.style.setProperty('--range-start', `${startPercent}%`);
       rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
       const fsRangeSlider = document.getElementById('mapFullscreenTimeRangeSlider');
@@ -3619,6 +3853,7 @@
         fsRangeSlider.style.setProperty('--range-start', `${startPercent}%`);
         fsRangeSlider.style.setProperty('--range-end', `${endPercent}%`);
       }
+      updateMapTimeMarkers();
     }
 
     function getMapVisiblePoints(){
@@ -3627,9 +3862,35 @@
       const maxIndex = Math.max(0, points.length - 1);
       const startSlider = document.getElementById('mapTimeStartSlider');
       const endSlider = document.getElementById('mapTimeEndSlider');
-      const startIndex = Math.max(0, Math.min(maxIndex, startSlider ? Number(startSlider.value) : 0));
-      const endIndex = Math.max(startIndex, Math.min(maxIndex, endSlider ? Number(endSlider.value) : maxIndex));
-      const visiblePoints = points.slice(startIndex, endIndex + 1);
+      const startValue = startSlider ? Number(startSlider.value) : mapSliderValueForPoint(0);
+      const endValue = endSlider ? Number(endSlider.value) : mapSliderValueForPoint(maxIndex);
+      let startIndex = 0;
+      let endIndex = maxIndex;
+      let visiblePoints;
+
+      if(mapSliderUsesTimestamps()){
+        let firstSelectedIndex = -1;
+        visiblePoints = points.filter((point, index) => {
+          const selected = point.timestampMs >= startValue && point.timestampMs <= endValue;
+          if(selected){
+            if(firstSelectedIndex < 0){
+              firstSelectedIndex = index;
+              startIndex = index;
+            }
+            endIndex = index;
+          }
+          return selected;
+        });
+        if(!visiblePoints.length){
+          startIndex = points.findIndex(point => point.timestampMs >= startValue);
+          if(startIndex < 0) startIndex = maxIndex;
+          endIndex = startIndex;
+        }
+      } else {
+        startIndex = Math.max(0, Math.min(maxIndex, startValue));
+        endIndex = Math.max(startIndex, Math.min(maxIndex, endValue));
+        visiblePoints = points.slice(startIndex, endIndex + 1);
+      }
       return { points: visiblePoints, startIndex, endIndex, total: points.length, totalLocationMessages, zeroCoordinateCount };
     }
 
@@ -3654,6 +3915,7 @@
       if(fsCurrentLabel) fsCurrentLabel.textContent = `${visiblePoints.length}/${visible.total} points`;
       syncMapFullscreenSlidersFromMain();
       updateMapTimeRangeVisual();
+      updateMapSliderScaleControls();
     }
 
     function renderMapView(fitBounds){
@@ -3794,10 +4056,7 @@
       const endSlider = document.getElementById('mapTimeEndSlider');
       if(sliderWrapper) sliderWrapper.style.display = 'block';
       if(startSlider && endSlider){
-        startSlider.min = endSlider.min = '0';
-        startSlider.max = endSlider.max = String(points.length - 1);
-        startSlider.value = '0';
-        endSlider.value = endSlider.max;
+        setMapSliderScale(0, points.length - 1, true);
         startSlider.disabled = endSlider.disabled = points.length <= 1;
       }
       renderMapView(true);
