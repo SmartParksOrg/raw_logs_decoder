@@ -106,7 +106,7 @@
       z-index:1;
     }
     .dual-range input[type="range"]{ z-index:2; }
-    #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:#0f766e; }
+    #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:rgba(15,118,110,.32); }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
     .map-tools-control{
@@ -218,6 +218,33 @@
     #mapWrapper:-webkit-full-screen .map-fullscreen-time-control,
     #mapWrapper.map-screenshot-capture .map-fullscreen-time-control{
       display:block;
+    }
+    #mapWrapper.map-screenshot-capture .map-fullscreen-time-control{
+      bottom:16px;
+      box-shadow:0 6px 18px rgba(17,24,39,.20);
+    }
+    #mapWrapper.map-screenshot-capture #mapFullscreenTimeRangeSlider{
+      --range-selected-color:transparent;
+    }
+    #mapWrapper.map-screenshot-capture.map-screenshot-fullscreen{
+      padding:0 !important;
+      background:#fff !important;
+      width:100vw !important;
+      height:100vh !important;
+      overflow:hidden !important;
+    }
+    #mapWrapper.map-screenshot-capture.map-screenshot-fullscreen #map{
+      width:100vw !important;
+      height:100vh !important;
+      margin:0 !important;
+      border:0 !important;
+      border-radius:0 !important;
+    }
+    #mapWrapper.map-screenshot-capture .map-fullscreen-time-control input[type="range"],
+    #mapWrapper.map-screenshot-capture .time-scale-reset,
+    #mapWrapper.map-screenshot-capture .map-tools-control,
+    #mapWrapper.map-screenshot-capture .leaflet-control-zoom{
+      display:none !important;
     }
     .map-fullscreen-time-title{
       display:flex;
@@ -3018,16 +3045,40 @@
       const button = document.getElementById('mapToolPngBtn');
       if(button) button.disabled = true;
       setRenderingBusy(true, 'Preparing map screenshot', 'Capturing the current map view as PNG...');
+      const wasFullscreen = isMapFullscreen();
+      const previousMapView = mapRef ? { center: mapRef.getCenter(), zoom: mapRef.getZoom() } : null;
       try{
-        if(mapRef) mapRef.invalidateSize();
+        const rect = wrapper.getBoundingClientRect();
         wrapper.classList.add('map-screenshot-capture');
+        if(wasFullscreen) wrapper.classList.add('map-screenshot-fullscreen');
         updateMapSliderLabels();
+        if(wasFullscreen && mapRef && previousMapView){
+          mapRef.invalidateSize({ pan: false });
+          mapRef.setView(previousMapView.center, previousMapView.zoom, { animate: false });
+        }
         await waitForNextPaint();
+        if(wasFullscreen && mapRef && previousMapView){
+          mapRef.invalidateSize({ pan: false });
+          mapRef.setView(previousMapView.center, previousMapView.zoom, { animate: false });
+        }
+        updateMapTimeMarkers();
+        await waitForNextPaint();
+        const captureRect = wrapper.getBoundingClientRect();
+        const viewportWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+        const viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+        const captureWidth = wasFullscreen ? viewportWidth : (captureRect.width || rect.width);
+        const captureHeight = wasFullscreen ? viewportHeight : (captureRect.height || rect.height);
         const canvas = await html2canvas(wrapper, {
           useCORS: true,
           allowTaint: false,
-          backgroundColor: null,
+          backgroundColor: '#ffffff',
           logging: false,
+          x: 0,
+          y: 0,
+          width: Math.ceil(captureWidth),
+          height: Math.ceil(captureHeight),
+          windowWidth: Math.ceil(captureWidth),
+          windowHeight: Math.ceil(captureHeight),
           scale: Math.min(2, window.devicePixelRatio || 1)
         });
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -3043,7 +3094,12 @@
       }catch(err){
         showError('Map screenshot failed: ' + (err && err.message ? err.message : String(err)));
       }finally{
+        wrapper.classList.remove('map-screenshot-fullscreen');
         wrapper.classList.remove('map-screenshot-capture');
+        if(wasFullscreen && mapRef && previousMapView){
+          mapRef.invalidateSize({ pan: false });
+          mapRef.setView(previousMapView.center, previousMapView.zoom, { animate: false });
+        }
         updateMapSliderLabels();
         setRenderingBusy(false);
         updateMapActionButtons();
