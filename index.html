@@ -1282,10 +1282,10 @@
             </div>
           </div>
           <div id="bleScanSummary"></div>
-          <div id="bleScanChartWrapper" class="visual-wrapper" style="margin-top:12px;">
+          <div id="bleScanChartWrapper" class="visual-wrapper" style="display:none; margin-top:12px;">
             <canvas id="bleScanChartCanvas" height="320"></canvas>
           </div>
-          <div id="bleScanTable" style="margin-top:12px;"></div>
+          <div id="bleScanTable" style="display:none; margin-top:12px;"></div>
         </div>
       </div>
     </details>
@@ -1749,6 +1749,49 @@
       return aTime - bTime;
     }
 
+    const TABLE_PAGINATION_SIZE = 100;
+    const TABLE_PAGINATION_SIZE_SELECTOR = [50, 100, 250, 500, true];
+    function tablePaginationOptions(){
+      return {
+        pagination: "local",
+        paginationSize: TABLE_PAGINATION_SIZE,
+        paginationSizeSelector: TABLE_PAGINATION_SIZE_SELECTOR,
+        paginationCounter: "rows"
+      };
+    }
+
+    function rowTimestampMs(rowData, fallbackValue){
+      if(!rowData) return null;
+      const direct = rowData.timestampMs ?? rowData.timestampSort;
+      if(Number.isFinite(direct)) return direct;
+      const iso = rowData.timestamp_utc;
+      if(iso){
+        const parsedIso = Date.parse(iso);
+        if(Number.isFinite(parsedIso)) return parsedIso;
+      }
+      const parsedFallback = fallbackValue ? Date.parse(fallbackValue) : NaN;
+      return Number.isFinite(parsedFallback) ? parsedFallback : null;
+    }
+
+    function timestampColumnSorter(a, b, aRow, bRow, column, dir){
+      const aTime = rowTimestampMs(aRow && aRow.getData ? aRow.getData() : null, a);
+      const bTime = rowTimestampMs(bRow && bRow.getData ? bRow.getData() : null, b);
+      const aValid = Number.isFinite(aTime);
+      const bValid = Number.isFinite(bTime);
+      if(!aValid && !bValid) return String(a || '').localeCompare(String(b || ''), undefined, { numeric:true, sensitivity:'base' });
+      if(!aValid) return dir === "desc" ? -1 : 1;
+      if(!bValid) return dir === "desc" ? 1 : -1;
+      return aTime - bTime;
+    }
+
+    function normalizeTableColumns(columns){
+      const timestampFields = new Set(['timestamp', 'timestamp_utc', 'timestamp_local', 'ts', 'bucket_start', 'time', 'toTime']);
+      return (columns || []).map(column => {
+        if(!column || column.sorter || !timestampFields.has(column.field)) return column;
+        return { ...column, sorter: timestampColumnSorter };
+      });
+    }
+
     function logSelectHeaderFilter(headerValue, rowValue){
       if(headerValue == null || headerValue === "") return true;
       return String(rowValue == null ? "" : rowValue) === String(headerValue);
@@ -1816,9 +1859,7 @@
         data: flatRows,
         layout: "fitColumns",
         height: "700px",
-        pagination: "local",
-        paginationSize: 100,
-        paginationSizeSelector: [50, 100, 250, 500],
+        ...tablePaginationOptions(),
         columns: [
           {
             title: "Timestamp (local)",
@@ -2676,8 +2717,7 @@
 
       // Show panels only after data is ready
       document.getElementById('analyticsPanel').style.display = 'block';
-      const mapPanel = document.getElementById('mapPanel');
-      if (mapPanel) mapPanel.style.display = 'block';
+      updateMapPanelAvailability(normalized, numericFields);
 
       const defaults = ["bat","temp","SIV","h_acc_est","cmdq_activity_average","cmdq_hrv"];
       for(const k of defaults){ if(numericFields.includes(k)){ document.getElementById('fieldSelect').value = k; break; } }
@@ -3422,7 +3462,11 @@
       if(aggTableRef){ try { aggTableRef.destroy(); } catch(e){} aggTableRef = null; }
       if(!columns || !columns.length){ return; }
       aggTableRef = new Tabulator('#aggTable', {
-        data: rows, layout: 'fitColumns', height: '360px', columns: columns
+        data: rows,
+        layout: 'fitColumns',
+        height: '360px',
+        ...tablePaginationOptions(),
+        columns: normalizeTableColumns(columns)
       });
     }
 
@@ -3478,7 +3522,16 @@
         const tableData = [], data = [];
         fr.forEach(r => {
           const x = numericValue(r, fieldX), y = numericValue(r, fieldY);
-          if(x!=null && y!=null){ tableData.push({ timestamp: r.timestamp_utc ? new Date(r.timestamp_utc).toLocaleString() : '', x, y }); data.push({x, y}); }
+          const timestampMs = r.timestamp_utc ? Date.parse(r.timestamp_utc) : NaN;
+          if(x!=null && y!=null){
+            tableData.push({
+              timestamp: Number.isFinite(timestampMs) ? new Date(timestampMs).toLocaleString() : '',
+              timestampMs: Number.isFinite(timestampMs) ? timestampMs : null,
+              x,
+              y
+            });
+            data.push({x, y});
+          }
         });
         renderAggTable(tableData, [
           {title:'Timestamp (local)', field:'timestamp'},
@@ -3549,7 +3602,7 @@
           const m2 = new Map(p2.map(p=>[p.x,p.y]));
           const keys = Array.from(new Set([...m1.keys(), ...m2.keys()])).sort((a,b)=>a-b);
           const cols = [{title:'Timestamp (local)', field:'ts'}];
-          const rows = keys.map(x => ({ ts: new Date(x).toLocaleString(), [fieldX]: m1.get(x) ?? '', ...(field2 ? { [field2]: m2.get(x) ?? '' } : {}) }));
+          const rows = keys.map(x => ({ ts: new Date(x).toLocaleString(), timestampMs:x, [fieldX]: m1.get(x) ?? '', ...(field2 ? { [field2]: m2.get(x) ?? '' } : {}) }));
           cols.push({ title: formatFieldLabel(fieldX), field: fieldX }); if(field2){ cols.push({ title: formatFieldLabel(field2), field: field2 }); }
           renderAggTable(rows, cols);
           const title = field2Label ? `${fieldXLabel} & ${field2Label} over time` : `${fieldXLabel} over time`;
@@ -3581,7 +3634,7 @@
           const p2 = field2 ? keys.map(k => ({ x: k, y: aggArray(groups.get(k).a2, agg) })) : [];
 
           const tableLabels = keys.map(k => { const d = new Date(k); return bucket==='day' ? d.toLocaleDateString() : d.toLocaleString(); });
-          const rowsTbl = keys.map((k,i) => ({ bucket_start: tableLabels[i], [fieldX]: p1[i].y, ...(field2 ? { [field2]: p2[i].y } : {}) }));
+          const rowsTbl = keys.map((k,i) => ({ bucket_start: tableLabels[i], timestampMs:k, [fieldX]: p1[i].y, ...(field2 ? { [field2]: p2[i].y } : {}) }));
           const colsTbl = [{ title:'Bucket start (local)', field:'bucket_start' }, { title:aggLabelX, field: fieldX }];
           if(field2) colsTbl.push({ title:aggLabel2, field: field2 });
           renderAggTable(rowsTbl, colsTbl);
@@ -3611,7 +3664,7 @@
         if(bucket === 'none'){
           const points = fr.map(r => ({ x: Date.parse(r.timestamp_utc), y: numericValue(r, fieldX) }))
                            .filter(p => Number.isFinite(p.x) && p.y != null).sort((a,b) => a.x - b.x);
-          const tableData = points.map(p => ({ timestamp: new Date(p.x).toLocaleString(), value: p.y }));
+          const tableData = points.map(p => ({ timestamp: new Date(p.x).toLocaleString(), timestampMs:p.x, value: p.y }));
           renderAggTable(tableData, [ {title:'Timestamp (local)', field:'timestamp'}, {title:formatFieldLabel(fieldX), field:'value'} ]);
           renderTimeBar({
             points,
@@ -3636,7 +3689,7 @@
           const points = keys.map((k,i) => ({ x: k, y: arr[i] }));
 
           const tableLabels = keys.map(k => { const d = new Date(k); return bucket==='day' ? d.toLocaleDateString() : d.toLocaleString(); });
-          const tableData = keys.map((k,i) => ({ bucket_start: tableLabels[i], value: arr[i] }));
+          const tableData = keys.map((k,i) => ({ bucket_start: tableLabels[i], timestampMs:k, value: arr[i] }));
           renderAggTable(tableData, [
             {title:'Bucket start (local)', field:'bucket_start'},
             {title:aggLabelX, field:'value'}
@@ -3892,6 +3945,56 @@
       return MAP_LOCATION_PORTS.has(port) && (sourcePort === '29' || sourcePort === port);
     }
 
+    function hasUsableMapLocationData(rows, numericFields){
+      const pickedLat = pickBestLat(numericFields || []) || 'latitude';
+      const pickedLon = pickBestLon(numericFields || []) || 'longitude';
+      return (rows || []).some(row => {
+        if(!isMapLocationRow(row)) return false;
+        const lat = numericValue(row, pickedLat);
+        const lon = numericValue(row, pickedLon);
+        return lat != null && lon != null
+          && lat !== 0 && lon !== 0
+          && lat >= -90 && lat <= 90
+          && lon >= -180 && lon <= 180;
+      });
+    }
+
+    function clearMapOutput(){
+      const msgEl = document.getElementById('mapMessage');
+      const mapEl = document.getElementById('map');
+      const mapWrapper = document.getElementById('mapWrapper');
+      const sliderWrapper = document.getElementById('mapTimeSliderWrapper');
+      if(msgEl) msgEl.textContent = '';
+      if(mapEl) mapEl.style.display = 'none';
+      if(mapWrapper) mapWrapper.style.display = 'none';
+      if(sliderWrapper) sliderWrapper.style.display = 'none';
+      setMapMetrics('');
+      setMapAnalysisNote('');
+      setMapStatsHtml('');
+      destroyMapCharts();
+      renderGenericMapTable([], []);
+      mapViewState = null;
+      if(MAP_SOG_TABS.has(mapActiveTab)) mapActiveTab = 'track';
+      updateMapTabs();
+      if(mapRef){
+        mapPointsLayer.clearLayers();
+        mapTrackLayer.clearLayers();
+        if(mapHeatLayer) mapHeatLayer.clearLayers();
+        if(mapWarningLayer) mapWarningLayer.clearLayers();
+        setMapLegendHtml('');
+      }
+      updateMapActionButtons();
+    }
+
+    function updateMapPanelAvailability(rows, numericFields){
+      const mapPanel = document.getElementById('mapPanel');
+      if(!mapPanel) return false;
+      const available = hasUsableMapLocationData(rows, numericFields);
+      mapPanel.style.display = available ? 'block' : 'none';
+      if(!available) clearMapOutput();
+      return available;
+    }
+
     function populateMapPortFilter(rows){
       const select = document.getElementById('mapPortFilter');
       if(!select) return;
@@ -3934,23 +4037,20 @@
       if(!rows || !rows.length){ return; }
       holder.style.display = 'block';
       mapTableRef = new Tabulator('#mapTable', {
-        data: rows, layout: 'fitColumns', height: '300px',
-        columns: [
+        data: rows,
+        layout: 'fitColumns',
+        height: '300px',
+        ...tablePaginationOptions(),
+        columns: normalizeTableColumns([
           {
             title: 'Timestamp (local)',
             field: 'timestamp',
-            sorter: function(a, b, aRow, bRow){
-              const aTime = aRow.getData().timestampMs;
-              const bTime = bRow.getData().timestampMs;
-              if(aTime == null) return bTime == null ? 0 : -1;
-              if(bTime == null) return 1;
-              return aTime - bTime;
-            }
+            sorter: timestampColumnSorter
           },
           { title: 'Latitude', field: 'latitude' },
           { title: 'Longitude', field: 'longitude' },
           { title: 'Horizontal accuracy estimate (m)', field: 'h_acc_est', sorter: 'number' }
-        ]
+        ])
       });
     }
 
@@ -3966,10 +4066,8 @@
         data: rows,
         layout: 'fitColumns',
         height: '300px',
-        pagination: 'local',
-        paginationSize: 100,
-        paginationSizeSelector: [50, 100, 250, 500],
-        columns
+        ...tablePaginationOptions(),
+        columns: normalizeTableColumns(columns)
       });
     }
     function downloadMapCSV(){ if (mapTableRef) { mapTableRef.download('csv', (logFileName || 'decoded') + '_map.csv'); } else { showError('No map data to download yet. Generate the map first.'); } }
@@ -4576,7 +4674,7 @@
       ].join(''));
       setMapAnalysisNote('Space-use is shown as a simple grid utilization layer. It is useful for exploratory hotspot/core-use review, but it is not a formal KDE, AKDE, Brownian bridge, or LoCoH home-range estimate.');
       setMapStatsHtml('');
-      renderGenericMapTable(grid.cells.slice(0, 30).map((cell, idx) => ({
+      renderGenericMapTable(grid.cells.map((cell, idx) => ({
         rank: idx + 1,
         fixes: cell.count,
         dwell_min: fmtNumber(cell.dwellSec / 60, 1),
@@ -4651,8 +4749,9 @@
         });
         return bins;
       })(), 'Segments', 'count');
-      renderGenericMapTable(segments.slice(0, 500).map(seg => ({
+      renderGenericMapTable(segments.map(seg => ({
         toTime: seg.toTime,
+        timestampMs: seg.timestampMs,
         step_m: fmtNumber(seg.distanceM, 1),
         dt_min: seg.dtSec == null ? '' : fmtNumber(seg.dtSec / 60, 2),
         speed_mps: seg.speedMps == null ? '' : fmtNumber(seg.speedMps, 2),
@@ -4845,8 +4944,8 @@
       setMapAnalysisNote('Quality diagnostics flag potential GPS/filtering issues. The speed threshold is intentionally conservative and should be adjusted for the species and deployment.');
       setMapStatsHtml('');
       renderGenericMapTable([
-        ...speedOutliers.slice(0, 100).map(seg => ({ type:'Speed warning', time:seg.toTime, value:formatSpeed(seg.speedMps), detail:`Step ${formatDistance(seg.distanceM)}` })),
-        ...gaps.slice(0, 100).map(seg => ({ type:'Large time gap', time:seg.toTime, value:`${fmtNumber(seg.dtSec / 60, 1)} min`, detail:`Step ${formatDistance(seg.distanceM)}` }))
+        ...speedOutliers.map(seg => ({ type:'Speed warning', time:seg.toTime, timestampMs:seg.timestampMs, value:formatSpeed(seg.speedMps), detail:`Step ${formatDistance(seg.distanceM)}` })),
+        ...gaps.map(seg => ({ type:'Large time gap', time:seg.toTime, timestampMs:seg.timestampMs, value:`${fmtNumber(seg.dtSec / 60, 1)} min`, detail:`Step ${formatDistance(seg.distanceM)}` }))
       ], [
         { title:'Issue', field:'type' },
         { title:'Time', field:'time', minWidth:160 },
@@ -5181,21 +5280,13 @@
       const mapWrapper = document.getElementById('mapWrapper');
 
       // Hide map before evaluation
-      if(mapEl) mapEl.style.display = 'none';
-      if(mapWrapper) mapWrapper.style.display = 'none';
-      if(msgEl) msgEl.textContent = '';
-      updateMapActionButtons();
-      setMapMetrics('');
-      setMapAnalysisNote('');
-      setMapStatsHtml('');
-      destroyMapCharts();
-      renderGenericMapTable([], []);
+      clearMapOutput();
 
       if(!analyticsCache){
-        if(msgEl) msgEl.textContent = 'no valid location data found';
         return;
       }
       const { rows, numericFields } = analyticsCache;
+      if(!updateMapPanelAvailability(rows, numericFields)) return;
       const filters = getMapFilters();
       const fr = filterRows(rows, filters).filter(isMapLocationRow);
 
@@ -5240,21 +5331,7 @@
       const sliderWrapper = document.getElementById('mapTimeSliderWrapper');
 
       if(!points.length){
-        if(msgEl) msgEl.textContent = 'no valid location data found';
-        mapViewState = null;
-        if(MAP_SOG_TABS.has(mapActiveTab)) mapActiveTab = 'track';
-        updateMapTabs();
-        if(sliderWrapper) sliderWrapper.style.display = 'none';
-        renderMapTable([]);
-        renderMapStats([], totalLocationMessages, zeroCoordinateCount);
-        if(mapRef){
-          mapPointsLayer.clearLayers();
-          mapTrackLayer.clearLayers();
-          if(mapHeatLayer) mapHeatLayer.clearLayers();
-          if(mapWarningLayer) mapWarningLayer.clearLayers();
-          setMapLegendHtml('');
-        }
-        updateMapActionButtons();
+        if(msgEl) msgEl.textContent = totalLocationMessages ? 'no valid locations in the current map filter' : '';
         return;
       }
 
@@ -5624,10 +5701,8 @@
         data: rows,
         layout:'fitColumns',
         height:'320px',
-        pagination:'local',
-        paginationSize:100,
-        paginationSizeSelector:[50, 100, 250, 500],
-        columns:[
+        ...tablePaginationOptions(),
+        columns:normalizeTableColumns([
           { title:'Timestamp (UTC)', field:'timestamp_utc', visible:false },
           { title:'Timestamp (local)', field:'timestamp_local', minWidth:160 },
           { title:'X', field:'x', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
@@ -5639,7 +5714,7 @@
           { title:'Jerk', field:'jerk', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 3) },
           { title:'Pitch', field:'pitch', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 1) },
           { title:'Roll', field:'roll', sorter:'number', formatter:cell => fmtNumber(cell.getValue(), 1) }
-        ],
+        ]),
         initialSort:[{ column:'timestamp_utc', dir:'asc' }]
       });
     }
@@ -6280,10 +6355,13 @@
     function renderBleScanRows(rows){
       const summary = document.getElementById('bleScanSummary');
       const tableHolder = document.getElementById('bleScanTable');
+      const chartWrapper = document.getElementById('bleScanChartWrapper');
       if(!summary || !tableHolder) return;
 
       if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
       tableHolder.innerHTML = '';
+      tableHolder.style.display = 'none';
+      if(chartWrapper) chartWrapper.style.display = 'none';
 
       if(!rows.length){
         if(bleScanChartRef){ bleScanChartRef.destroy(); bleScanChartRef = null; }
@@ -6303,18 +6381,21 @@
           <tr><td>Weakest RSSI</td><td>${minRssi} dBm</td></tr>
         </table>`;
 
+      if(chartWrapper) chartWrapper.style.display = 'block';
       renderBleScanChart(rows);
 
+      tableHolder.style.display = 'block';
       bleScanTableRef = new Tabulator('#bleScanTable', {
         data: rows,
         layout: 'fitColumns',
         height: '320px',
-        columns: [
+        ...tablePaginationOptions(),
+        columns: normalizeTableColumns([
           { title: 'Timestamp (UTC)', field: 'timestamp_utc', visible: false },
           { title: 'Timestamp (local)', field: 'timestamp_local' },
           { title: 'MAC tail (last 3 bytes)', field: 'device' },
           { title: 'RSSI (dBm)', field: 'rssi', sorter: 'number' }
-        ],
+        ]),
         initialSort: [
           { column: 'timestamp_utc', dir: 'asc' },
           { column: 'device', dir: 'asc' }
@@ -6803,10 +6884,8 @@
         data: rows,
         layout: 'fitColumns',
         height: '360px',
-        pagination: 'local',
-        paginationSize: 100,
-        paginationSizeSelector: [50, 100, 250, 500],
-        columns: [
+        ...tablePaginationOptions(),
+        columns: normalizeTableColumns([
           { title:'Timestamp (UTC)', field:'timestamp_utc', visible:false },
           { title:'Timestamp (local)', field:'timestamp_local', minWidth:160 },
           { title:'Source port', field:'source_port', sorter:'number', width:110 },
@@ -6820,7 +6899,7 @@
           { title:'Activity avg', field:'cmdq_activity_average', sorter:'number', width:120 },
           { title:'Active min last hour', field:'cmdq_active_min_in_last_hour', sorter:'number', width:160 },
           { title:'Impedance', field:'cmdq_h_impedance', sorter:'number', width:110 }
-        ],
+        ]),
         initialSort: [{ column:'timestamp_utc', dir:'asc' }]
       });
     }
