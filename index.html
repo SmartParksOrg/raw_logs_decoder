@@ -1309,7 +1309,7 @@
               <span id="cmdqTimeEndLabel"></span>
             </div>
           </div>
-          <div id="cmdqTabs" class="tab-bar" role="tablist" aria-label="CMDQ dashboard views">
+          <div id="cmdqTabs" class="tab-bar" role="tablist" aria-label="CMDQ dashboard views" style="display:none;">
             <button type="button" class="tab-button active" data-cmdq-tab="overview">Overview</button>
             <button type="button" class="tab-button" data-cmdq-tab="heart">Heart</button>
             <button type="button" class="tab-button" data-cmdq-tab="activity">Activity</button>
@@ -6562,6 +6562,9 @@
     };
 
     function updateCmdqTabs(){
+      const tabs = document.getElementById('cmdqTabs');
+      const hasRows = !!(cmdqViewState && Array.isArray(cmdqViewState.rows) && cmdqViewState.rows.length);
+      if(tabs) tabs.style.display = hasRows ? 'flex' : 'none';
       document.querySelectorAll('[data-cmdq-tab]').forEach(button => {
         const active = button.dataset.cmdqTab === cmdqActiveTab;
         button.classList.toggle('active', active);
@@ -6928,6 +6931,7 @@
 
         if(!rows.length){
           cmdqViewState = null;
+          updateCmdqTabs();
           if(sliderWrapper) sliderWrapper.style.display = 'none';
           summary.innerHTML = '<em>No CMDQ records found for the selected time range.</em>';
           panel.style.display = 'block';
@@ -6935,6 +6939,7 @@
         }
 
         cmdqViewState = { rows };
+        updateCmdqTabs();
         const startSlider = document.getElementById('cmdqTimeStartSlider');
         const endSlider = document.getElementById('cmdqTimeEndSlider');
         if(sliderWrapper) sliderWrapper.style.display = 'block';
