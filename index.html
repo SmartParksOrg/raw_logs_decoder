@@ -60,8 +60,8 @@
     /* Map block */
     #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
-    #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper{ margin-top:12px; }
-    #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
+    #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper, #logTimeSliderWrapper{ margin-top:12px; }
+    #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .time-slider-row{
       display:grid;
       grid-template-columns:minmax(0, 1fr) auto;
@@ -108,6 +108,7 @@
     .dual-range input[type="range"]{ z-index:2; }
     #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:rgba(15,118,110,.32); }
     #accelerometerTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.32); }
+    #logTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.32); }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
     .map-tools-control{
@@ -549,21 +550,48 @@
       border-color:transparent;
     }
     .row-detail-holder{
-      margin:8px 0 2px;
-      padding:10px;
-      background:rgba(255,255,255,.05);
+      display:block;
+      clear:both;
+      margin:8px 10px 8px;
+      padding:0;
+      background:#121821;
       border-radius:8px;
-      border:1px solid rgba(255,255,255,.08);
+      border:1px solid rgba(90,167,255,.36);
       box-sizing:border-box;
-      width:100%;
-      max-width:100%;
-      overflow:auto;
+      width:calc(100% - 20px);
+      overflow:hidden;
+      box-shadow:0 8px 22px rgba(0,0,0,.24);
+      color:#e7edf5;
+      user-select:text;
+    }
+    .row-detail-heading{
+      margin:0;
+      padding:8px 10px;
+      background:rgba(90,167,255,.10);
+      border-bottom:1px solid rgba(90,167,255,.22);
+      color:#e7edf5;
+      font-size:12px;
+      font-weight:700;
     }
     .row-detail-holder pre{
       margin:0;
+      padding:10px;
+      max-height:420px;
+      overflow:auto;
+      background:#0b0f14;
+      color:#e7edf5 !important;
       white-space:pre-wrap;
       overflow-wrap:anywhere;
       word-break:break-word;
+      user-select:text;
+    }
+    .row-detail-holder pre::selection,
+    .row-detail-heading::selection{
+      background:rgba(90,167,255,.45);
+      color:#ffffff;
+    }
+    #output .tabulator-row.log-row-expanded{
+      background:rgba(90,167,255,.10);
     }
     .science-note{
       margin:10px 0 0;
@@ -1044,6 +1072,31 @@
       <summary><span class="chev">▸</span> Log messages</summary>
       <div class="section-body">
         <p id="logTip" class="muted" style="margin-top:0; display:none;">Tip: click a row to toggle and view the full message content.</p>
+        <div id="logTimeSliderWrapper" style="display:none;">
+          <label>Log message time range</label>
+          <div class="time-slider-row">
+            <div class="dual-range" id="logTimeRangeSlider">
+              <div class="dual-range-track"></div>
+              <canvas id="logTimeMarkers" class="time-marker-canvas" aria-hidden="true"></canvas>
+              <input id="logTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Log message start time" />
+              <input id="logTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Log message end time" />
+            </div>
+            <button type="button" id="logTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </button>
+          </div>
+          <div id="logTimeSliderLabels" class="dim">
+            <span id="logTimeStartLabel"></span>
+            <strong id="logTimeCurrentLabel"></strong>
+            <span id="logTimeEndLabel"></span>
+          </div>
+          <div class="time-scale-row">
+            <span id="logTimeScaleLabel" class="dim"></span>
+          </div>
+        </div>
         <div id="output"></div>
       </div>
     </details>
@@ -1420,24 +1473,69 @@
     }
 
     // ---------- Table ----------
+    function timestampSecondsToMs(value){
+      if(value == null || value === "") return null;
+      const timestamp = Number(value);
+      return Number.isFinite(timestamp) ? timestamp * 1000 : null;
+    }
+
+    function formatLogTimestampFromSeconds(value){
+      const timestampMs = timestampSecondsToMs(value);
+      return timestampMs == null ? "(unknown)" : new Date(timestampMs).toLocaleString();
+    }
+
+    function logTimestampSorter(a, b, aRow, bRow, column, dir){
+      const aTime = aRow && aRow.getData ? aRow.getData().timestampSort : null;
+      const bTime = bRow && bRow.getData ? bRow.getData().timestampSort : null;
+      const aValid = Number.isFinite(aTime);
+      const bValid = Number.isFinite(bTime);
+      if(!aValid && !bValid) return 0;
+      if(!aValid) return dir === "desc" ? -1 : 1;
+      if(!bValid) return dir === "desc" ? 1 : -1;
+      return aTime - bTime;
+    }
+
+    function logSelectHeaderFilter(headerValue, rowValue){
+      if(headerValue == null || headerValue === "") return true;
+      return String(rowValue == null ? "" : rowValue) === String(headerValue);
+    }
+
+    function buildLogHeaderFilterValues(rows, field, label="All", sortFn=null){
+      const values = { "": label };
+      const unique = Array.from(new Set((rows || []).map(row => row[field]).filter(value => value != null && value !== "")));
+      unique.sort(sortFn || ((a, b) => String(a).localeCompare(String(b), undefined, { numeric:true, sensitivity:"base" })));
+      unique.forEach(value => {
+        values[String(value)] = String(value);
+      });
+      return values;
+    }
+
     function buildRawTableRows(data){
       const flatRows = [];
       data.forEach((entry) => {
         if (entry.port === 29 && entry.decodedData && typeof entry.decodedData === "object") {
           Object.values(entry.decodedData).forEach((sub) => {
             if (sub && typeof sub === "object" && "port" in sub && "timestamp" in sub) {
+              const timestampMs = timestampSecondsToMs(sub.timestamp);
+              const dataObj = sub.data != null ? sub.data : {};
               flatRows.push({
-                timestamp: new Date(sub.timestamp * 1000).toLocaleString(),
+                timestamp: timestampMs == null ? "(unknown)" : new Date(timestampMs).toLocaleString(),
+                timestampSort: timestampMs,
                 port: sub.port,
-                data: sub.data != null ? sub.data : {}
+                messageType: resolveMessageType(Number(sub.port), dataObj),
+                data: dataObj
               });
             }
           });
         } else {
+          const timestampMs = timestampSecondsToMs(entry.timestamp);
+          const dataObj = entry.decodedData != null ? entry.decodedData : (entry.error != null ? entry.error : {});
           flatRows.push({
-            timestamp: entry.timestamp != null ? new Date(entry.timestamp * 1000).toLocaleString() : "(unknown)",
+            timestamp: formatLogTimestampFromSeconds(entry.timestamp),
+            timestampSort: timestampMs,
             port: entry.port != null ? entry.port : "(unknown)",
-            data: entry.decodedData != null ? entry.decodedData : (entry.error != null ? entry.error : {})
+            messageType: entry.port != null ? resolveMessageType(Number(entry.port), dataObj) : "unknown",
+            data: dataObj
           });
         }
       });
@@ -1450,15 +1548,15 @@
       // Show or hide the tip depending on data presence
       const tip = document.getElementById("logTip");
       if (tip) tip.style.display = flatRows.length ? "block" : "none";
+      expandedLogMessageRow = null;
 
       if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }
-      function normalizeExpandedRowHeight(row){
-        if(row && typeof row.normalizeHeight === "function"){
-          row.normalizeHeight();
-        } else if(outputTableRef && typeof outputTableRef.redraw === "function"){
-          outputTableRef.redraw(true);
-        }
-      }
+      const portFilterValues = buildLogHeaderFilterValues(flatRows, "port", "All ports");
+      const messageTypeFilterValues = buildLogHeaderFilterValues(flatRows, "messageType", "All message types");
+      const logTimeRows = flatRows
+        .map((row, originalIndex) => ({ row, originalIndex }))
+        .filter(item => Number.isFinite(item.row.timestampSort))
+        .sort((a, b) => a.row.timestampSort - b.row.timestampSort || a.originalIndex - b.originalIndex);
 
       outputTableRef = new Tabulator("#output", {
         data: flatRows,
@@ -1468,28 +1566,330 @@
         paginationSize: 100,
         paginationSizeSelector: [50, 100, 250, 500],
         columns: [
-          { title: "Timestamp (local)", field: "timestamp", sorter: "string", headerFilter: "input" },
-          { title: "Port", field: "port", sorter: "number", headerFilter: "input" }
-        ],
-        rowClick: function (e, row) {
-          const data = row.getData();
-          const rowEl = row.getElement();
-          const existing = rowEl.querySelector(".row-detail-holder");
-          if(existing){
-            existing.remove();
-            normalizeExpandedRowHeight(row);
-            return;
+          {
+            title: "Timestamp (local)",
+            field: "timestamp",
+            sorter: logTimestampSorter
+          },
+          {
+            title: "Port",
+            field: "port",
+            sorter: "number",
+            headerFilter: "select",
+            headerFilterParams: { values: portFilterValues },
+            headerFilterFunc: logSelectHeaderFilter
+          },
+          {
+            title: "Message type",
+            field: "messageType",
+            sorter: "string",
+            headerFilter: "select",
+            headerFilterParams: { values: messageTypeFilterValues },
+            headerFilterFunc: logSelectHeaderFilter,
+            minWidth: 170
           }
-          const holder = document.createElement("div");
-          holder.className = "row-detail-holder";
-          const pre = document.createElement("pre");
-          pre.textContent = JSON.stringify(data.data != null ? data.data : {}, null, 2);
-          holder.appendChild(pre);
-          rowEl.appendChild(holder);
-          normalizeExpandedRowHeight(row);
-          afterNextPaint(() => normalizeExpandedRowHeight(row));
-        }
+        ],
+        initialSort: [{ column: "timestamp", dir: "desc" }]
       });
+
+      const logTimeState = {
+        scaleMinIndex: 0,
+        scaleMaxIndex: Math.max(0, logTimeRows.length - 1)
+      };
+
+      function getLogTimeControls(){
+        return {
+          wrapper: document.getElementById("logTimeSliderWrapper"),
+          range: document.getElementById("logTimeRangeSlider"),
+          start: document.getElementById("logTimeStartSlider"),
+          end: document.getElementById("logTimeEndSlider"),
+          markers: document.getElementById("logTimeMarkers"),
+          reset: document.getElementById("logTimeResetScaleBtn"),
+          startLabel: document.getElementById("logTimeStartLabel"),
+          endLabel: document.getElementById("logTimeEndLabel"),
+          currentLabel: document.getElementById("logTimeCurrentLabel"),
+          scaleLabel: document.getElementById("logTimeScaleLabel")
+        };
+      }
+
+      function logTimeValueAt(index){
+        return logTimeRows[index] ? logTimeRows[index].row.timestampSort : null;
+      }
+
+      function setLogTimeSliderScale(minIndex, maxIndex, resetSelection=false){
+        const controls = getLogTimeControls();
+        if(!controls.start || !controls.end || !logTimeRows.length) return;
+        const maxAvailable = logTimeRows.length - 1;
+        logTimeState.scaleMinIndex = Math.max(0, Math.min(maxAvailable, Math.floor(minIndex)));
+        logTimeState.scaleMaxIndex = Math.max(logTimeState.scaleMinIndex, Math.min(maxAvailable, Math.ceil(maxIndex)));
+        const minValue = logTimeValueAt(logTimeState.scaleMinIndex);
+        const maxValue = logTimeValueAt(logTimeState.scaleMaxIndex);
+        if(minValue == null || maxValue == null) return;
+        const currentStart = resetSelection ? minValue : Math.max(minValue, Math.min(maxValue, Number(controls.start.value) || minValue));
+        const currentEnd = resetSelection ? maxValue : Math.max(currentStart, Math.min(maxValue, Number(controls.end.value) || maxValue));
+
+        controls.start.min = controls.end.min = String(minValue);
+        controls.start.max = controls.end.max = String(maxValue);
+        controls.start.value = String(currentStart);
+        controls.end.value = String(currentEnd);
+        updateLogTimeSliderLabels();
+      }
+
+      function constrainLogTimeRange(changedHandle){
+        const { start, end } = getLogTimeControls();
+        if(!start || !end) return;
+        if(Number(start.value) > Number(end.value)){
+          if(changedHandle === "start") end.value = start.value;
+          else start.value = end.value;
+        }
+      }
+
+      function isLogTimeFullRange(){
+        return logTimeState.scaleMinIndex <= 0 && logTimeState.scaleMaxIndex >= logTimeRows.length - 1;
+      }
+
+      function isLogTimeSelectionFullScale(){
+        const { start, end } = getLogTimeControls();
+        if(!start || !end || !logTimeRows.length) return true;
+        return Number(start.value) <= Number(start.min) && Number(end.value) >= Number(end.max);
+      }
+
+      function logTimeRowMatchesSelection(rowData){
+        const { start, end } = getLogTimeControls();
+        if(!start || !end) return true;
+        const value = rowData.timestampSort;
+        const fullSelection = isLogTimeFullRange() && isLogTimeSelectionFullScale();
+        if(!Number.isFinite(value)) return fullSelection;
+        return value >= Number(start.value) && value <= Number(end.value);
+      }
+
+      function applyLogTimeFilter(){
+        if(!outputTableRef || typeof outputTableRef.setFilter !== "function") return;
+        if(expandedLogMessageRow){
+          collapseLogMessageRow(expandedLogMessageRow);
+          expandedLogMessageRow = null;
+        }
+        outputTableRef.setFilter(logTimeRowMatchesSelection);
+      }
+
+      function getLogTimeVisibleCount(){
+        return flatRows.filter(logTimeRowMatchesSelection).length;
+      }
+
+      function updateLogTimeRangeVisual(){
+        const { start, end, range } = getLogTimeControls();
+        if(!start || !end || !range) return;
+        const min = Number(start.min);
+        const max = Number(end.max);
+        const span = max - min;
+        const startPercent = span > 0 ? ((Number(start.value) - min) / span) * 100 : 0;
+        const endPercent = span > 0 ? ((Number(end.value) - min) / span) * 100 : 100;
+        range.style.setProperty("--range-start", `${startPercent}%`);
+        range.style.setProperty("--range-end", `${endPercent}%`);
+        drawLogTimeMarkers();
+      }
+
+      function drawLogTimeMarkers(){
+        const { markers, start, end } = getLogTimeControls();
+        if(!markers || !start || !end || !logTimeRows.length) return;
+        const rect = markers.getBoundingClientRect();
+        const width = Math.max(1, Math.round(rect.width));
+        const height = Math.max(1, Math.round(rect.height || 28));
+        const dpr = window.devicePixelRatio || 1;
+        const targetWidth = Math.round(width * dpr);
+        const targetHeight = Math.round(height * dpr);
+        if(markers.width !== targetWidth) markers.width = targetWidth;
+        if(markers.height !== targetHeight) markers.height = targetHeight;
+        const ctx = markers.getContext("2d");
+        if(!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, width, height);
+
+        const minValue = logTimeValueAt(logTimeState.scaleMinIndex);
+        const maxValue = logTimeValueAt(logTimeState.scaleMaxIndex);
+        if(minValue == null || maxValue == null) return;
+        const span = maxValue - minValue;
+        const selectedStart = Number(start.value);
+        const selectedEnd = Number(end.value);
+        const y = height - 4;
+        for(let i = logTimeState.scaleMinIndex; i <= logTimeState.scaleMaxIndex; i++){
+          const value = logTimeRows[i].row.timestampSort;
+          const ratio = span > 0 ? (value - minValue) / span : 0.5;
+          const x = Math.max(0, Math.min(1, ratio)) * width;
+          const selected = value >= selectedStart && value <= selectedEnd;
+          ctx.beginPath();
+          ctx.arc(x, y, 1.7, 0, Math.PI * 2);
+          ctx.fillStyle = selected ? "rgba(249,115,22,.78)" : "rgba(90,167,255,.28)";
+          ctx.fill();
+        }
+      }
+
+      function updateLogTimeSliderLabels(){
+        const { start, end, startLabel, endLabel, currentLabel, scaleLabel, reset } = getLogTimeControls();
+        if(!start || !end) return;
+        const startValue = Number(start.value);
+        const endValue = Number(end.value);
+        if(startLabel) startLabel.textContent = Number.isFinite(startValue) ? new Date(startValue).toLocaleString() : "Unknown time";
+        if(endLabel) endLabel.textContent = Number.isFinite(endValue) ? new Date(endValue).toLocaleString() : "Unknown time";
+        if(currentLabel) currentLabel.textContent = `${getLogTimeVisibleCount()}/${flatRows.length} messages`;
+        if(scaleLabel){
+          scaleLabel.textContent = isLogTimeFullRange()
+            ? "Slider scale: full range"
+            : `Slider scale: ${new Date(logTimeValueAt(logTimeState.scaleMinIndex)).toLocaleString()} to ${new Date(logTimeValueAt(logTimeState.scaleMaxIndex)).toLocaleString()}`;
+        }
+        if(reset) reset.disabled = isLogTimeFullRange() && isLogTimeSelectionFullScale();
+        updateLogTimeRangeVisual();
+      }
+
+      function zoomLogTimeSliderToSelection(){
+        const { start, end } = getLogTimeControls();
+        if(!start || !end || !logTimeRows.length) return;
+        const startValue = Number(start.value);
+        const endValue = Number(end.value);
+        const selectedIndexes = [];
+        for(let i = 0; i < logTimeRows.length; i++){
+          const value = logTimeRows[i].row.timestampSort;
+          if(value >= startValue && value <= endValue) selectedIndexes.push(i);
+        }
+        if(selectedIndexes.length > 1){
+          setLogTimeSliderScale(selectedIndexes[0], selectedIndexes[selectedIndexes.length - 1]);
+        }
+      }
+
+      function initializeLogTimeSlider(){
+        const { wrapper, start, end, reset } = getLogTimeControls();
+        if(!wrapper || !start || !end) return;
+        if(logTimeRows.length < 2){
+          wrapper.style.display = "none";
+          return;
+        }
+        wrapper.style.display = "block";
+        start.disabled = end.disabled = false;
+        setLogTimeSliderScale(0, logTimeRows.length - 1, true);
+        applyLogTimeFilter();
+        start.oninput = () => {
+          constrainLogTimeRange("start");
+          updateLogTimeSliderLabels();
+          applyLogTimeFilter();
+        };
+        end.oninput = () => {
+          constrainLogTimeRange("end");
+          updateLogTimeSliderLabels();
+          applyLogTimeFilter();
+        };
+        start.onchange = end.onchange = () => {
+          zoomLogTimeSliderToSelection();
+          updateLogTimeSliderLabels();
+          applyLogTimeFilter();
+        };
+        if(reset){
+          reset.onclick = () => {
+            setLogTimeSliderScale(0, logTimeRows.length - 1, true);
+            applyLogTimeFilter();
+          };
+        }
+        afterNextPaint(() => updateLogTimeSliderLabels());
+      }
+
+      initializeLogTimeSlider();
+
+      function normalizeLogRowHeight(row){
+        if(!row || typeof row.getElement !== "function") return;
+        const rowEl = row.getElement();
+        const detailEl = rowEl.querySelector(".row-detail-holder");
+        if(detailEl){
+          const cellHeight = Math.max(...Array.from(rowEl.querySelectorAll(".tabulator-cell")).map(cell => cell.offsetHeight || 0), 0);
+          rowEl.style.minHeight = `${cellHeight + detailEl.offsetHeight + 16}px`;
+        } else {
+          rowEl.style.minHeight = "";
+        }
+        if(typeof row.normalizeHeight === "function"){
+          row.normalizeHeight();
+        }
+      }
+
+      function collapseLogMessageRow(row){
+        if(!row || typeof row.getElement !== "function") return;
+        const rowEl = row.getElement();
+        const existing = rowEl.querySelector(".row-detail-holder");
+        if(existing) existing.remove();
+        rowEl.classList.remove("log-row-expanded");
+        rowEl.style.minHeight = "";
+        normalizeLogRowHeight(row);
+      }
+
+      function toggleLogMessageDetail(row){
+        if(!row || typeof row.getData !== "function" || typeof row.getElement !== "function") return;
+        const rowData = row.getData();
+        const rowEl = row.getElement();
+        const existing = rowEl.querySelector(".row-detail-holder");
+
+        if(existing){
+          collapseLogMessageRow(row);
+          if(expandedLogMessageRow === row) expandedLogMessageRow = null;
+          return;
+        }
+
+        if(expandedLogMessageRow && expandedLogMessageRow !== row){
+          collapseLogMessageRow(expandedLogMessageRow);
+        }
+
+        const detailText = JSON.stringify(rowData.data != null ? rowData.data : {}, null, 2);
+        const holder = document.createElement("div");
+        holder.className = "row-detail-holder";
+        holder.addEventListener("click", (event) => {
+          event.__logMessageDetailHandled = true;
+          event.stopPropagation();
+        });
+        holder.addEventListener("mousedown", (event) => {
+          event.__logMessageDetailHandled = true;
+          event.stopPropagation();
+        });
+        holder.addEventListener("dblclick", (event) => {
+          event.__logMessageDetailHandled = true;
+          event.stopPropagation();
+        });
+        holder.addEventListener("touchstart", (event) => {
+          event.__logMessageDetailHandled = true;
+          event.stopPropagation();
+        });
+        const heading = document.createElement("div");
+        heading.className = "row-detail-heading";
+        heading.textContent = `Full decoded message - ${rowData.timestamp || "Unknown time"} - port ${rowData.port != null ? rowData.port : "unknown"} - ${rowData.messageType || "unknown"}`;
+        const pre = document.createElement("pre");
+        pre.textContent = detailText;
+        holder.appendChild(heading);
+        holder.appendChild(pre);
+        rowEl.appendChild(holder);
+        rowEl.classList.add("log-row-expanded");
+        expandedLogMessageRow = row;
+        normalizeLogRowHeight(row);
+        afterNextPaint(() => normalizeLogRowHeight(row));
+      }
+
+      function handleLogMessageRowClick(event, row){
+        if(event){
+          if(event.__logMessageDetailHandled) return;
+          if(event.target && event.target.closest && event.target.closest(".row-detail-holder")) return;
+          event.__logMessageDetailHandled = true;
+        }
+        toggleLogMessageDetail(row);
+      }
+
+      if(typeof outputTableRef.on === "function"){
+        outputTableRef.on("rowClick", (e, row) => handleLogMessageRowClick(e, row));
+      }
+
+      const outputEl = document.getElementById("output");
+      if(outputEl){
+        outputEl.onclick = (event) => {
+          if(event.__logMessageDetailHandled) return;
+          const rowEl = event.target && event.target.closest ? event.target.closest(".tabulator-row") : null;
+          if(!rowEl || !outputEl.contains(rowEl) || !outputTableRef || typeof outputTableRef.getRows !== "function") return;
+          const row = outputTableRef.getRows().find(candidate => candidate.getElement && candidate.getElement() === rowEl);
+          if(row) handleLogMessageRowClick(event, row);
+        };
+      }
     }
 
     // ---------- Helpers & schema ----------
@@ -1926,6 +2326,7 @@
     let chartRef = null;
     let aggTableRef = null;
     let outputTableRef = null;
+    let expandedLogMessageRow = null;
 
     // Map globals
     let mapRef = null;
@@ -1960,6 +2361,7 @@
       if(chartRef){ try { chartRef.destroy(); } catch(e){} chartRef = null; }
       if(aggTableRef){ try { aggTableRef.destroy(); } catch(e){} aggTableRef = null; }
       if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }
+      expandedLogMessageRow = null;
       if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
       destroyMapCharts();
       destroyAccelerometerDashboard();
