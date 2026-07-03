@@ -99,8 +99,9 @@
     #summaryPanel .summary-table th, #summaryPanel .summary-table td { padding: 4px 8px; border-bottom: 1px solid #eee; text-align: left; }
 
     /* Map block */
-    #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
+    #map { height: 380px; margin-top:0; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
+    #mapMessage:empty, #mapMetrics:empty{ display:none; }
     #analyticsTimeSliderWrapper, #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper, #logTimeSliderWrapper, #bleTimeSliderWrapper{ margin-top:12px; }
     #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .time-slider-row{
@@ -152,8 +153,20 @@
     #accelerometerTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.32); }
     #logTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.32); }
     #bleTimeRangeSlider{ --range-selected-color:rgba(22,163,74,.32); }
-    .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
+    .map-latest-legend{ display:flex; align-items:center; gap:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
+    .map-legend-control{
+      background:rgba(255,255,255,.96);
+      color:#16202c;
+      border:1px solid rgba(17,24,39,.14);
+      border-radius:8px;
+      box-shadow:0 8px 22px rgba(17,24,39,.18);
+      padding:7px 9px;
+      backdrop-filter:blur(6px);
+      font-size:12px;
+      font-weight:600;
+    }
+    .map-legend-control:empty{ display:none; }
     .map-tools-control{
       background:rgba(255,255,255,.96);
       color:#16202c;
@@ -212,6 +225,9 @@
       display:grid;
       gap:4px;
     }
+    .map-layer-list + .map-layer-heading{
+      margin-top:7px;
+    }
     .map-layer-chip{
       appearance:none;
       color:#16202c;
@@ -233,6 +249,46 @@
       border-color:rgba(37,99,235,.36);
       background:rgba(37,99,235,.10);
     }
+    .map-tool-check{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      margin:0;
+      padding:5px 6px;
+      border:1px solid rgba(17,24,39,.12);
+      border-radius:6px;
+      background:#f6f8fb;
+      color:#16202c;
+      font-size:11px;
+      font-weight:600;
+      cursor:pointer;
+      user-select:none;
+    }
+    .map-tool-check input{
+      width:auto;
+      margin:0;
+      accent-color:#2563eb;
+    }
+    .map-tool-number{
+      margin-bottom:5px;
+    }
+    .map-tool-number label{
+      color:#5b6678;
+      font-size:10px;
+      font-weight:700;
+      margin:0 0 4px;
+    }
+    .map-tool-number input{
+      width:100%;
+      box-sizing:border-box;
+      border:1px solid rgba(17,24,39,.18);
+      border-radius:6px;
+      background:#f6f8fb;
+      color:#16202c;
+      padding:5px 6px;
+      font-size:11px;
+      font-weight:700;
+    }
     .map-layer-swatch{
       width:8px;
       height:8px;
@@ -243,6 +299,20 @@
     .map-layer-swatch.track{ background:#cc3333; }
     .map-layer-swatch.heatmap{ background:#f59e0b; }
     .map-layer-swatch.warnings{ background:#dc2626; }
+    .map-speed-legend{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      color:#16202c;
+      font-size:12px;
+    }
+    .map-speed-gradient{
+      width:140px;
+      height:10px;
+      border-radius:999px;
+      background:linear-gradient(90deg,#2563eb,#22c55e,#f59e0b,#dc2626);
+      border:1px solid rgba(17,24,39,.14);
+    }
     .map-fullscreen-time-control{
       display:none;
       position:absolute;
@@ -564,6 +634,14 @@
     .tabulator{ background: var(--bg-elev); border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
     .tabulator .tabulator-header{ background:transparent; border-bottom:1px solid rgba(255,255,255,.08); }
     #map{ border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
+    #mapWrapper{
+      background:transparent;
+      border:0;
+      overflow:hidden;
+    }
+    #mapAnalysisNote[style*="block"] + #mapWrapper{
+      margin-top:10px;
+    }
 
     #progressWrapper{ background: rgba(255,255,255,.08); border-radius: 999px; overflow:hidden; }
     #progressBar{ background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
@@ -657,16 +735,17 @@
       padding:6px;
       background:var(--section-bg);
       border:1px solid var(--section-border);
-      border-radius:999px;
+      border-radius:8px;
       width:max-content;
       max-width:100%;
+      box-sizing:border-box;
     }
     .tab-button{
       appearance:none;
       border:1px solid var(--section-border-strong);
       background:var(--tab-bg);
       color:var(--text);
-      border-radius:999px;
+      border-radius:6px;
       padding:7px 12px;
       cursor:pointer;
       font-weight:600;
@@ -685,6 +764,17 @@
       background:linear-gradient(180deg, var(--brand), color-mix(in oklab, var(--brand) 80%, black));
       color:#fff;
       border-color:transparent;
+    }
+    @media (max-width: 680px){
+      .tab-bar{
+        gap:6px;
+        padding:5px;
+        border-radius:6px;
+      }
+      .tab-button{
+        border-radius:5px;
+        padding:7px 10px;
+      }
     }
     .row-detail-holder{
       display:block;
@@ -1010,6 +1100,8 @@
             <button type="button" class="tab-button" data-map-tab="space">Space Use</button>
             <button type="button" class="tab-button" data-map-tab="movement">Movement</button>
             <button type="button" class="tab-button" data-map-tab="quality">Quality</button>
+            <button type="button" class="tab-button" data-map-tab="activeTracking" style="display:none;">Active tracking</button>
+            <button type="button" class="tab-button" data-map-tab="speedLimit" style="display:none;">Speed limit</button>
           </div>
 
           <div id="mapMessage" class="muted"></div>
@@ -1068,13 +1160,11 @@
             <div class="time-scale-row">
               <span id="mapTimeScaleLabel" class="dim"></span>
             </div>
-            <div class="map-latest-legend dim"><span class="map-latest-dot"></span> Latest visible location</div>
           </div>
 
-          <div id="mapStatsBox" style="margin-top:12px;"></div>
-          <div id="mapCharts" class="dashboard-grid" style="margin-top:12px;"></div>
-          <div id="mapTable" style="margin-top:12px;"></div>
-          <p class="muted" style="margin-top:8px;">Tip: Map uses its own port filter and time slider.</p>
+          <div id="mapStatsBox" style="display:none; margin-top:12px;"></div>
+          <div id="mapCharts" class="dashboard-grid" style="display:none; margin-top:12px;"></div>
+          <div id="mapTable" style="display:none; margin-top:12px;"></div>
         </div>
       </div>
     </details>
@@ -2460,6 +2550,9 @@
     let mapActiveTab = 'track';
     let mapLayerPrefs = { points:true, track:true, heatmap:true, warnings:true };
     let mapToolsContent = null;
+    let mapLegendContent = null;
+    let mapIgnoreStationarySpeed = false;
+    let mapSpeedLimitKmh = 50;
     let bleScanTableRef = null;
     let bleScanChartRef = null;
     let bleScanViewState = null;
@@ -2492,6 +2585,7 @@
       if(mapPointsLayer) mapPointsLayer.clearLayers();
       if(mapTrackLayer) mapTrackLayer.clearLayers();
       if(mapWarningLayer) mapWarningLayer.clearLayers();
+      setMapLegendHtml('');
       analyticsCache = null;
       analyticsTimeViewState = null;
       mapViewState = null;
@@ -3522,10 +3616,14 @@
     //          MAP
     // =========================
     const MAP_LOCATION_PORTS = new Set(['2', '13', '16']);
-    const MAP_TABS = new Set(['track', 'space', 'movement', 'quality']);
+    const MAP_TABS = new Set(['track', 'space', 'movement', 'quality', 'activeTracking', 'speedLimit']);
+    const MAP_SOG_TABS = new Set(['activeTracking', 'speedLimit']);
 
     function updateMapTabs(){
+      const hasSogData = !!mapViewState?.hasSogData;
       document.querySelectorAll('[data-map-tab]').forEach(button => {
+        const requiresSog = MAP_SOG_TABS.has(button.dataset.mapTab);
+        button.style.display = requiresSog && !hasSogData ? 'none' : '';
         const active = button.dataset.mapTab === mapActiveTab;
         button.classList.toggle('active', active);
         button.setAttribute('aria-selected', active ? 'true' : 'false');
@@ -3534,6 +3632,7 @@
 
     function setMapTab(tab){
       if(!MAP_TABS.has(tab)) return;
+      if(MAP_SOG_TABS.has(tab) && !mapViewState?.hasSogData) return;
       mapActiveTab = tab;
       updateMapTabs();
       if(mapViewState) renderMapView(false);
@@ -3623,7 +3722,9 @@
         track: ['points', 'track'],
         space: ['points', 'heatmap'],
         movement: ['points', 'track'],
-        quality: ['points', 'track', 'warnings']
+        quality: ['points', 'track', 'warnings'],
+        activeTracking: ['points', 'track'],
+        speedLimit: ['points', 'track', 'warnings']
       };
       return (byTab[mapActiveTab] || byTab.track).map(key => defs[key]).filter(def => def.layer);
     }
@@ -3634,13 +3735,26 @@
         track:'Track',
         space:'Space Use',
         movement:'Movement',
-        quality:'Quality'
+        quality:'Quality',
+        activeTracking:'Active tracking',
+        speedLimit:'Speed limit'
       }[mapActiveTab] || 'Map';
       const layerRows = getRelevantMapLayerDefs().map(def => `
         <button type="button" class="map-layer-chip ${mapLayerPrefs[def.key] ? 'active' : ''}" data-map-layer="${def.key}" aria-pressed="${mapLayerPrefs[def.key] ? 'true' : 'false'}">
           <span class="map-layer-swatch ${def.key}"></span>
           <span>${def.label}</span>
         </button>`).join('');
+      const speedFilter = MAP_SOG_TABS.has(mapActiveTab) && mapViewState?.hasSogData ? `
+        <div class="map-layer-heading">Speed filter</div>
+        ${mapActiveTab === 'speedLimit' ? `
+        <div class="map-tool-number">
+          <label for="mapSpeedLimitInputTool">Speed limit (km/h)</label>
+          <input id="mapSpeedLimitInputTool" type="number" min="0" step="1" value="${fmtNumber(mapSpeedLimitKmh, 1)}">
+        </div>` : ''}
+        <label class="map-tool-check">
+          <input type="checkbox" id="mapIgnoreStationarySpeedTool" ${mapIgnoreStationarySpeed ? 'checked' : ''}>
+          <span>Ignore speed = 0</span>
+        </label>` : '';
       mapToolsContent.innerHTML = `
         <div class="map-tools-title">${tabLabel}</div>
         <div class="map-tools-actions">
@@ -3648,7 +3762,8 @@
           <button type="button" id="mapToolPngBtn" class="map-tool-button png" title="Download map PNG">PNG</button>
         </div>
         <div class="map-layer-heading">Visible layers</div>
-        <div class="map-layer-list">${layerRows}</div>`;
+        <div class="map-layer-list">${layerRows}</div>
+        ${speedFilter}`;
 
       const fullscreenButton = mapToolsContent.querySelector('#mapToolFullscreenBtn');
       if(fullscreenButton) fullscreenButton.onclick = toggleMapFullscreen;
@@ -3662,6 +3777,21 @@
           else syncMapLayerControlForActiveTab();
         };
       });
+      const stationarySpeedToggle = mapToolsContent.querySelector('#mapIgnoreStationarySpeedTool');
+      if(stationarySpeedToggle){
+        stationarySpeedToggle.onchange = () => {
+          mapIgnoreStationarySpeed = stationarySpeedToggle.checked;
+          if(mapViewState && MAP_SOG_TABS.has(mapActiveTab)) renderMapView(false);
+        };
+      }
+      const speedLimitInput = mapToolsContent.querySelector('#mapSpeedLimitInputTool');
+      if(speedLimitInput){
+        speedLimitInput.onchange = () => {
+          const value = Number(speedLimitInput.value);
+          if(Number.isFinite(value) && value >= 0) mapSpeedLimitKmh = value;
+          if(mapViewState && mapActiveTab === 'speedLimit') renderMapView(false);
+        };
+      }
       updateMapActionButtons();
     }
 
@@ -3669,7 +3799,15 @@
       mapChartRefs.forEach(chart => { try { chart.destroy(); } catch(e){} });
       mapChartRefs = [];
       const charts = document.getElementById('mapCharts');
-      if(charts) charts.innerHTML = '';
+      if(charts){
+        charts.innerHTML = '';
+        charts.style.display = 'none';
+      }
+    }
+
+    function setMapLegendHtml(html){
+      if(!mapLegendContent) return;
+      mapLegendContent.innerHTML = html || '';
     }
 
     function getMapLayerVisibility(){
@@ -3705,6 +3843,13 @@
       }
       return fields.find(field => suffixPattern.test(field)) || '';
     }
+
+    function isMapLocationRow(row){
+      const port = String(row?.port);
+      const sourcePort = String(row?.source_port);
+      return MAP_LOCATION_PORTS.has(port) && (sourcePort === '29' || sourcePort === port);
+    }
+
     function populateMapPortFilter(rows){
       const select = document.getElementById('mapPortFilter');
       if(!select) return;
@@ -3713,7 +3858,7 @@
       const ports = new Map();
       (rows || []).forEach(row => {
         const port = String(row.port);
-        if(String(row.source_port) !== '29' || !MAP_LOCATION_PORTS.has(port) || ports.has(port)) return;
+        if(!isMapLocationRow(row) || ports.has(port)) return;
         ports.set(port, resolveMessageType(row.port, row.dataObj));
       });
 
@@ -3740,9 +3885,12 @@
 
     function renderMapTable(rows){
       const holder = document.getElementById('mapTable');
+      if(!holder) return;
       holder.innerHTML = '';
+      holder.style.display = 'none';
       if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
       if(!rows || !rows.length){ return; }
+      holder.style.display = 'block';
       mapTableRef = new Tabulator('#mapTable', {
         data: rows, layout: 'fitColumns', height: '300px',
         columns: [
@@ -3768,8 +3916,10 @@
       const holder = document.getElementById('mapTable');
       if(!holder) return;
       holder.innerHTML = '';
+      holder.style.display = 'none';
       if(mapTableRef){ try { mapTableRef.destroy(); } catch(e){} mapTableRef = null; }
       if(!rows || !rows.length || !columns || !columns.length){ return; }
+      holder.style.display = 'block';
       mapTableRef = new Tabulator('#mapTable', {
         data: rows,
         layout: 'fitColumns',
@@ -3894,11 +4044,21 @@
         return container;
       };
       toolsControl.addTo(mapRef);
+      const legendControl = L.control({ position:'bottomleft' });
+      legendControl.onAdd = () => {
+        const container = L.DomUtil.create('div', 'map-legend-control');
+        L.DomEvent.disableClickPropagation(container);
+        L.DomEvent.disableScrollPropagation(container);
+        mapLegendContent = container;
+        return container;
+      };
+      legendControl.addTo(mapRef);
     }
 
     function renderMapStats(points, totalLocationMessages, zeroCoordinateCount){
       const statsBox = document.getElementById('mapStatsBox');
       if(!statsBox) return;
+      statsBox.style.display = 'block';
       const failedFixPercentage = totalLocationMessages
         ? (zeroCoordinateCount / totalLocationMessages) * 100
         : 0;
@@ -3930,12 +4090,18 @@
 
     function setMapMetrics(html){
       const metrics = document.getElementById('mapMetrics');
-      if(metrics) metrics.innerHTML = html || '';
+      if(metrics){
+        metrics.innerHTML = html || '';
+        metrics.style.display = html ? 'grid' : 'none';
+      }
     }
 
     function setMapStatsHtml(html){
       const statsBox = document.getElementById('mapStatsBox');
-      if(statsBox) statsBox.innerHTML = html || '';
+      if(statsBox){
+        statsBox.innerHTML = html || '';
+        statsBox.style.display = html ? 'block' : 'none';
+      }
     }
 
     function toRad(deg){ return deg * Math.PI / 180; }
@@ -3977,6 +4143,49 @@
     function formatSpeed(mps){
       if(!Number.isFinite(mps)) return '-';
       return `${fmtNumber(mps, 2)} m/s`;
+    }
+
+    function formatSpeedKmh(kmh){
+      if(!Number.isFinite(kmh)) return '-';
+      return `${fmtNumber(kmh, 1)} km/h`;
+    }
+
+    function getSogPoints(points){
+      return (points || []).filter(point => {
+        if(String(point.port) !== '2' || !Number.isFinite(point.sogKmh)) return false;
+        return !mapIgnoreStationarySpeed || point.sogKmh !== 0;
+      });
+    }
+
+    function getMapSpeedLimitKmh(){
+      return Number.isFinite(mapSpeedLimitKmh) && mapSpeedLimitKmh >= 0 ? mapSpeedLimitKmh : 50;
+    }
+
+    function speedColorForKmh(speedKmh, maxSpeedKmh){
+      if(!Number.isFinite(speedKmh)) return '#64748b';
+      const max = Number.isFinite(maxSpeedKmh) && maxSpeedKmh > 0 ? maxSpeedKmh : 1;
+      const ratio = Math.max(0, Math.min(1, speedKmh / max));
+      if(ratio < 0.33){
+        const t = ratio / 0.33;
+        return interpolateHexColor('#2563eb', '#22c55e', t);
+      }
+      if(ratio < 0.66){
+        const t = (ratio - 0.33) / 0.33;
+        return interpolateHexColor('#22c55e', '#f59e0b', t);
+      }
+      const t = (ratio - 0.66) / 0.34;
+      return interpolateHexColor('#f59e0b', '#dc2626', t);
+    }
+
+    function interpolateHexColor(a, b, t){
+      const parse = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+      const ca = parse(a);
+      const cb = parse(b);
+      const clamped = Math.max(0, Math.min(1, t));
+      return '#' + ca.map((start, idx) => {
+        const value = Math.round(start + (cb[idx] - start) * clamped);
+        return value.toString(16).padStart(2, '0');
+      }).join('');
     }
 
     function projectedPoint(point, origin){
@@ -4088,6 +4297,7 @@
     function renderMapAnalysisChart(title, datasets, yTitle){
       const holder = document.getElementById('mapCharts');
       if(!holder) return;
+      holder.style.display = '';
       const panel = document.createElement('div');
       panel.className = 'dashboard-panel';
       const heading = document.createElement('h3');
@@ -4131,6 +4341,7 @@
     function renderMapBarChart(title, labels, data, label, yTitle){
       const holder = document.getElementById('mapCharts');
       if(!holder) return;
+      holder.style.display = '';
       const panel = document.createElement('div');
       panel.className = 'dashboard-panel';
       const heading = document.createElement('h3');
@@ -4229,8 +4440,11 @@
       const accuracyLabel = point.horizontalAccuracy == null
         ? ''
         : `<br>Horizontal accuracy estimate: ${fmtNumber(point.horizontalAccuracy)} m`;
+      const speedLabel = Number.isFinite(point.sogKmh)
+        ? `<br>SOG: ${formatSpeedKmh(point.sogKmh)}`
+        : '';
       const title = heading ? `<strong>${heading}</strong><br>` : '';
-      return `${title}${point.tsLabel}<br>${point.lat.toFixed(6)}, ${point.lon.toFixed(6)}${accuracyLabel}`;
+      return `${title}${point.tsLabel}<br>${point.lat.toFixed(6)}, ${point.lon.toFixed(6)}${accuracyLabel}${speedLabel}`;
     }
 
     function addClickableMapPoint(point, visualOptions, popupHtml){
@@ -4262,6 +4476,7 @@
 
     function renderTrackMap(visiblePoints, latestPoint, totalLocationMessages, zeroCoordinateCount){
       const layers = getMapLayerVisibility();
+      setMapLegendHtml(latestPoint ? '<div class="map-latest-legend"><span class="map-latest-dot"></span> Latest visible location</div>' : '');
       renderMapTable(visiblePoints.map(p => ({
         timestamp: p.tsLabel,
         timestampMs: p.timestampMs,
@@ -4406,6 +4621,129 @@
         { title:'Interval (min)', field:'dt_min', sorter:'number' },
         { title:'Speed (m/s)', field:'speed_mps', sorter:'number' },
         { title:'Turn (deg)', field:'turn_deg', sorter:'number' }
+      ]);
+    }
+
+    function renderActiveTrackingMap(visiblePoints){
+      const layers = getMapLayerVisibility();
+      const sogPoints = getSogPoints(visiblePoints);
+      const speeds = sogPoints.map(point => point.sogKmh).filter(Number.isFinite);
+      const maxSpeed = speeds.length ? Math.max(...speeds) : null;
+      const meanSpeed = speeds.length ? ss.mean(speeds) : null;
+
+      if(layers.track && sogPoints.length >= 2){
+        for(let i = 1; i < sogPoints.length; i++){
+          const from = sogPoints[i - 1];
+          const to = sogPoints[i];
+          mapTrackLayer.addLayer(L.polyline([[from.lat, from.lon], [to.lat, to.lon]], {
+            color: speedColorForKmh(to.sogKmh, maxSpeed),
+            weight: 4,
+            opacity: 0.82,
+            renderer: mapCanvasRenderer
+          }).bindPopup(`SOG: ${formatSpeedKmh(to.sogKmh)}<br>${to.tsLabel}`));
+        }
+      }
+
+      if(layers.points){
+        sogPoints.forEach(point => {
+          addClickableMapPoint(point, {
+            radius: point.sogKmh === 0 ? 3 : 4,
+            fillColor: speedColorForKmh(point.sogKmh, maxSpeed),
+            fillOpacity: point.sogKmh === 0 ? 0.45 : 0.82,
+            color: '#ffffff',
+            weight: 1,
+            stroke: true
+          }, mapPointPopupHtml(point, 'Active tracking fix'));
+        });
+      }
+
+      setMapMetrics([
+        renderMetricTile('SOG fixes', sogPoints.length),
+        renderMetricTile('Mean SOG', formatSpeedKmh(meanSpeed)),
+        renderMetricTile('Max SOG', formatSpeedKmh(maxSpeed)),
+        renderMetricTile('Stationary fixes', sogPoints.filter(point => point.sogKmh === 0).length, 'SOG = 0 km/h')
+      ].join(''));
+      setMapAnalysisNote('Active tracking uses reported SOG from port 2 messages in km/h. Track color runs from blue at low speed to red at the highest visible speed.');
+      setMapLegendHtml('<div class="map-speed-legend"><span>Low</span><span class="map-speed-gradient"></span><span>High</span></div>');
+      setMapStatsHtml('');
+      renderGenericMapTable(sogPoints.map(point => ({
+        timestamp: point.tsLabel,
+        timestampMs: point.timestampMs,
+        latitude: fmtNumber(point.lat, 6),
+        longitude: fmtNumber(point.lon, 6),
+        sog_kmh: fmtNumber(point.sogKmh, 1),
+        active_tracking: point.activeTracking
+      })), [
+        { title:'Timestamp (local)', field:'timestamp', minWidth:160 },
+        { title:'Latitude', field:'latitude' },
+        { title:'Longitude', field:'longitude' },
+        { title:'SOG (km/h)', field:'sog_kmh', sorter:'number' },
+        { title:'Active tracking', field:'active_tracking', sorter:'number' }
+      ]);
+    }
+
+    function renderSpeedLimitMap(visiblePoints){
+      const layers = getMapLayerVisibility();
+      const sogPoints = getSogPoints(visiblePoints);
+      const speedLimit = getMapSpeedLimitKmh();
+      const exceedances = sogPoints.filter(point => point.sogKmh > speedLimit);
+
+      if(layers.track && sogPoints.length >= 2){
+        mapTrackLayer.addLayer(L.polyline(sogPoints.map(point => [point.lat, point.lon]), {
+          color:'#475569', weight:2, opacity:0.55, renderer:mapCanvasRenderer
+        }));
+      }
+
+      if(layers.points){
+        sogPoints.forEach(point => {
+          addClickableMapPoint(point, {
+            radius:3,
+            fillColor:'#2563eb',
+            fillOpacity:0.35,
+            color:'#2563eb',
+            weight:0
+          }, mapPointPopupHtml(point, 'GPS fix'));
+        });
+      }
+
+      if(layers.warnings){
+        exceedances.forEach(point => {
+          const excess = point.sogKmh - speedLimit;
+          const radius = Math.max(5, Math.min(12, 5 + excess / 10));
+          mapWarningLayer.addLayer(L.circleMarker([point.lat, point.lon], {
+            radius,
+            fillColor:'#dc2626',
+            fillOpacity:0.85,
+            color:'#ffffff',
+            weight:2,
+            renderer:mapCanvasRenderer
+          }).bindPopup(`<strong>Speed limit exceeded</strong><br>${point.tsLabel}<br>SOG: ${formatSpeedKmh(point.sogKmh)}<br>Limit: ${formatSpeedKmh(speedLimit)}`));
+        });
+      }
+
+      setMapMetrics([
+        renderMetricTile('Speed limit', formatSpeedKmh(speedLimit)),
+        renderMetricTile('SOG fixes', sogPoints.length),
+        renderMetricTile('Exceedances', exceedances.length),
+        renderMetricTile('Max SOG', formatSpeedKmh(sogPoints.length ? Math.max(...sogPoints.map(point => point.sogKmh)) : null))
+      ].join(''));
+      setMapAnalysisNote('Speed limit view uses reported SOG from port 2 active tracking messages. Points are flagged only when SOG is greater than the selected limit.');
+      setMapStatsHtml('');
+      renderGenericMapTable(exceedances.map(point => ({
+        timestamp: point.tsLabel,
+        timestampMs: point.timestampMs,
+        latitude: fmtNumber(point.lat, 6),
+        longitude: fmtNumber(point.lon, 6),
+        sog_kmh: fmtNumber(point.sogKmh, 1),
+        limit_kmh: fmtNumber(speedLimit, 1),
+        over_kmh: fmtNumber(point.sogKmh - speedLimit, 1)
+      })), [
+        { title:'Timestamp (local)', field:'timestamp', minWidth:160 },
+        { title:'Latitude', field:'latitude' },
+        { title:'Longitude', field:'longitude' },
+        { title:'SOG (km/h)', field:'sog_kmh', sorter:'number' },
+        { title:'Limit (km/h)', field:'limit_kmh', sorter:'number' },
+        { title:'Over (km/h)', field:'over_kmh', sorter:'number' }
       ]);
     }
 
@@ -4766,6 +5104,7 @@
       updateMapSliderLabels();
       ensureMapInitialized();
       syncMapLayerControlForActiveTab();
+      setMapLegendHtml('');
       destroyMapCharts();
       mapPointsLayer.clearLayers();
       mapTrackLayer.clearLayers();
@@ -4778,6 +5117,10 @@
         renderMovementAnalysis(visiblePoints);
       } else if(mapActiveTab === 'quality'){
         renderQualityAnalysis(visiblePoints, totalLocationMessages, zeroCoordinateCount);
+      } else if(mapActiveTab === 'activeTracking'){
+        renderActiveTrackingMap(visiblePoints);
+      } else if(mapActiveTab === 'speedLimit'){
+        renderSpeedLimitMap(visiblePoints);
       } else {
         renderTrackMap(visiblePoints, latestPoint, totalLocationMessages, zeroCoordinateCount);
       }
@@ -4812,9 +5155,7 @@
       }
       const { rows, numericFields } = analyticsCache;
       const filters = getMapFilters();
-      const fr = filterRows(rows, filters).filter(row =>
-        String(row.source_port) === '29' && MAP_LOCATION_PORTS.has(String(row.port))
-      );
+      const fr = filterRows(rows, filters).filter(isMapLocationRow);
 
       const pickedLat = pickBestLat(numericFields) || 'latitude';
       const pickedLon = pickBestLon(numericFields) || 'longitude';
@@ -4831,12 +5172,17 @@
         if(lat < -90 || lat > 90 || lon < -180 || lon > 180) return;
         if(ignoreZeros && (lat === 0 || lon === 0)) return;
         const horizontalAccuracy = numericValue(r, 'h_acc_est');
+        const sogKmh = numericValue(r, 'sog');
+        const activeTracking = numericValue(r, 'active_t');
         const parsedTs = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
         const timestampMs = parsedTs && Number.isFinite(parsedTs.getTime()) ? parsedTs.getTime() : null;
         points.push({
+          port: r.port,
           lat,
           lon,
           horizontalAccuracy,
+          sogKmh,
+          activeTracking,
           ts: timestampMs == null ? null : parsedTs,
           timestampMs,
           tsLabel: timestampMs == null ? '' : parsedTs.toLocaleString()
@@ -4854,6 +5200,8 @@
       if(!points.length){
         if(msgEl) msgEl.textContent = 'no valid location data found';
         mapViewState = null;
+        if(MAP_SOG_TABS.has(mapActiveTab)) mapActiveTab = 'track';
+        updateMapTabs();
         if(sliderWrapper) sliderWrapper.style.display = 'none';
         renderMapTable([]);
         renderMapStats([], totalLocationMessages, zeroCoordinateCount);
@@ -4862,6 +5210,7 @@
           mapTrackLayer.clearLayers();
           if(mapHeatLayer) mapHeatLayer.clearLayers();
           if(mapWarningLayer) mapWarningLayer.clearLayers();
+          setMapLegendHtml('');
         }
         updateMapActionButtons();
         return;
@@ -4871,7 +5220,10 @@
       if(mapEl) mapEl.style.display = 'block';
       if(mapWrapper) mapWrapper.style.display = 'block';
       updateMapActionButtons();
-      mapViewState = { points, totalLocationMessages, zeroCoordinateCount };
+      const hasSogData = points.some(point => String(point.port) === '2' && Number.isFinite(point.sogKmh));
+      mapViewState = { points, totalLocationMessages, zeroCoordinateCount, hasSogData };
+      if(MAP_SOG_TABS.has(mapActiveTab) && !hasSogData) mapActiveTab = 'track';
+      updateMapTabs();
 
       const startSlider = document.getElementById('mapTimeStartSlider');
       const endSlider = document.getElementById('mapTimeEndSlider');
