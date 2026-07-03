@@ -614,6 +614,38 @@
       width:100%;
       margin-right:0;
     }
+    .load-log-grid{
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:12px;
+      align-items:stretch;
+    }
+    .load-log-option{
+      display:flex;
+      flex-direction:column;
+      min-width:0;
+    }
+    .load-log-option .btn{
+      width:100%;
+      box-sizing:border-box;
+      margin-right:0;
+      text-align:center;
+    }
+    .load-log-file-name{
+      margin-top:6px;
+      min-height:16px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .load-log-action{
+      grid-column:1 / -1;
+    }
+    @media (max-width: 680px){
+      .load-log-grid{
+        grid-template-columns:1fr;
+      }
+    }
 
     /* Hide the real file inputs (we style their labels as buttons) */
     .visually-hidden-input{ position:absolute; left:-9999px; width:1px; height:1px; opacity:0; pointer-events:none; }
@@ -626,6 +658,12 @@
       border-radius: var(--radius);
       padding: 18px;
       text-align:center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:38px;
+      box-sizing:border-box;
+      flex:1;
     }
     #dropArea.hover{ border-color: var(--brand); background: var(--drop-bg-hover); color: var(--text); }
 
@@ -913,21 +951,20 @@
     <details id="loadRawLogCard" class="card" open>
       <summary><span class="chev">▸</span> Load Raw Log file</summary>
       <div class="section-body">
-        <div class="grid" style="display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(260px,1fr));">
-          <div>
+        <div class="grid load-log-grid">
+          <div class="load-log-option">
             <label for="fileInput">Select log file</label>
             <input type="file" id="fileInput" class="visually-hidden-input" />
             <label for="fileInput" class="btn primary">Choose log file</label>
-            <div id="fileInputName" class="muted" style="margin-top:6px;">No file selected</div>
+            <div id="fileInputName" class="muted load-log-file-name">No file selected</div>
           </div>
-          <div>
-            <label class="muted">&nbsp;</label>
+          <div class="load-log-option">
+            <label>Drop log file</label>
             <div id="dropArea">Or drop a log file here</div>
           </div>
 
           <!-- Decode on its own row below the two selectors -->
-          <div style="grid-column: 1 / -1;">
-            <label class="muted">&nbsp;</label>
+          <div class="load-log-action">
             <button id="decodeButton" class="btn success">Decode</button>
           </div>
         </div>
