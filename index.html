@@ -553,6 +553,16 @@
       background:rgba(255,255,255,.05);
       border-radius:8px;
       border:1px solid rgba(255,255,255,.08);
+      box-sizing:border-box;
+      width:100%;
+      max-width:100%;
+      overflow:auto;
+    }
+    .row-detail-holder pre{
+      margin:0;
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      word-break:break-word;
     }
     .science-note{
       margin:10px 0 0;
@@ -1429,6 +1439,14 @@
       if (tip) tip.style.display = flatRows.length ? "block" : "none";
 
       if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }
+      function normalizeExpandedRowHeight(row){
+        if(row && typeof row.normalizeHeight === "function"){
+          row.normalizeHeight();
+        } else if(outputTableRef && typeof outputTableRef.redraw === "function"){
+          outputTableRef.redraw(true);
+        }
+      }
+
       outputTableRef = new Tabulator("#output", {
         data: flatRows,
         layout: "fitColumns",
@@ -1446,14 +1464,17 @@
           const existing = rowEl.querySelector(".row-detail-holder");
           if(existing){
             existing.remove();
+            normalizeExpandedRowHeight(row);
             return;
           }
           const holder = document.createElement("div");
           holder.className = "row-detail-holder";
           const pre = document.createElement("pre");
-          pre.innerText = JSON.stringify(data.data != null ? data.data : {}, null, 2);
+          pre.textContent = JSON.stringify(data.data != null ? data.data : {}, null, 2);
           holder.appendChild(pre);
           rowEl.appendChild(holder);
+          normalizeExpandedRowHeight(row);
+          afterNextPaint(() => normalizeExpandedRowHeight(row));
         }
       });
     }
