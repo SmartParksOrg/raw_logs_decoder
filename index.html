@@ -60,8 +60,8 @@
     /* Map block */
     #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
-    #mapTimeSliderWrapper{ margin-top:12px; }
-    #mapTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
+    #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper{ margin-top:12px; }
+    #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .time-slider-row{
       display:grid;
       grid-template-columns:minmax(0, 1fr) auto;
@@ -107,6 +107,7 @@
     }
     .dual-range input[type="range"]{ z-index:2; }
     #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:rgba(15,118,110,.32); }
+    #accelerometerTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.32); }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
     .map-tools-control{
@@ -943,15 +944,27 @@
 
           <div id="accelerometerTimeSliderWrapper" style="display:none;">
             <label>Accelerometer time range</label>
-            <div class="dual-range" id="accelerometerTimeRangeSlider">
-              <div class="dual-range-track"></div>
-              <input id="accelerometerTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer start time" />
-              <input id="accelerometerTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer end time" />
+            <div class="time-slider-row">
+              <div class="dual-range" id="accelerometerTimeRangeSlider">
+                <div class="dual-range-track"></div>
+                <canvas id="accelerometerTimeMarkers" class="time-marker-canvas" aria-hidden="true"></canvas>
+                <input id="accelerometerTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer start time" />
+                <input id="accelerometerTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer end time" />
+              </div>
+              <button type="button" id="accelerometerTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
             </div>
             <div id="accelerometerTimeSliderLabels" class="dim">
               <span id="accelerometerTimeStartLabel"></span>
               <strong id="accelerometerTimeCurrentLabel"></strong>
               <span id="accelerometerTimeEndLabel"></span>
+            </div>
+            <div class="time-scale-row">
+              <span id="accelerometerTimeScaleLabel" class="dim"></span>
             </div>
           </div>
 
@@ -1896,8 +1909,10 @@
           constrainAccelerometerTimeRange(id === 'accelerometerTimeStartSlider' ? 'start' : 'end');
           updateAccelerometerSliderLabels();
         };
-        slider.onchange = () => renderAccelerometerView();
+        slider.onchange = () => commitAccelerometerTimeSelection();
       });
+      const accelerometerTimeResetScaleBtn = document.getElementById('accelerometerTimeResetScaleBtn');
+      if(accelerometerTimeResetScaleBtn) accelerometerTimeResetScaleBtn.onclick = () => resetAccelerometerSliderScale();
       ['startTime','endTime','mapStartTime','mapEndTime','bleStartTime','bleEndTime'].forEach((id) => {
         const input = document.getElementById(id);
         if(input) input.addEventListener('input', () => { input.dataset.userEdited = 'true'; });
@@ -4543,16 +4558,170 @@
       }
     }
 
+    function accelerometerSliderUsesTimestamps(){
+      const rows = accelerometerViewState?.rows || [];
+      if(rows.length < 2) return false;
+      return rows.every(row => Number.isFinite(row.timestampMs)) && rows[rows.length - 1].timestampMs > rows[0].timestampMs;
+    }
+
+    function accelerometerSliderValueForRow(index){
+      const row = accelerometerViewState?.rows?.[index];
+      return accelerometerSliderUsesTimestamps() && row ? row.timestampMs : index;
+    }
+
+    function getAccelerometerSliderScaleIndexes(){
+      const startSlider = document.getElementById('accelerometerTimeStartSlider');
+      const endSlider = document.getElementById('accelerometerTimeEndSlider');
+      if(!startSlider || !endSlider) return { minIndex: 0, maxIndex: 0 };
+      return {
+        minIndex: Number(startSlider.dataset.scaleMinIndex) || 0,
+        maxIndex: Number(endSlider.dataset.scaleMaxIndex) || 0
+      };
+    }
+
+    function setAccelerometerSliderScale(minIndex, maxIndex, resetSelection=false){
+      if(!accelerometerViewState) return;
+      const startSlider = document.getElementById('accelerometerTimeStartSlider');
+      const endSlider = document.getElementById('accelerometerTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+
+      const maxRowIndex = Math.max(0, accelerometerViewState.rows.length - 1);
+      const min = Math.max(0, Math.min(maxRowIndex, Math.floor(minIndex)));
+      const max = Math.max(min, Math.min(maxRowIndex, Math.ceil(maxIndex)));
+      const minValue = accelerometerSliderValueForRow(min);
+      const maxValue = accelerometerSliderValueForRow(max);
+      const currentStart = resetSelection ? minValue : Math.max(minValue, Math.min(maxValue, Number(startSlider.value) || minValue));
+      const currentEnd = resetSelection ? maxValue : Math.max(currentStart, Math.min(maxValue, Number(endSlider.value) || maxValue));
+
+      startSlider.min = endSlider.min = String(minValue);
+      startSlider.max = endSlider.max = String(maxValue);
+      startSlider.value = String(currentStart);
+      endSlider.value = String(currentEnd);
+      startSlider.dataset.scaleMinIndex = endSlider.dataset.scaleMinIndex = String(min);
+      startSlider.dataset.scaleMaxIndex = endSlider.dataset.scaleMaxIndex = String(max);
+      startSlider.dataset.rowCount = endSlider.dataset.rowCount = String(accelerometerViewState.rows.length);
+      updateAccelerometerSliderLabels();
+      afterNextPaint(() => updateAccelerometerTimeMarkers());
+    }
+
+    function resetAccelerometerSliderScale(){
+      if(!accelerometerViewState) return;
+      setAccelerometerSliderScale(0, accelerometerViewState.rows.length - 1);
+      renderAccelerometerView();
+    }
+
+    function zoomAccelerometerSliderToSelection(){
+      if(!accelerometerViewState) return false;
+      const visible = getAccelerometerVisibleRows();
+      if(visible.endIndex <= visible.startIndex) return false;
+      setAccelerometerSliderScale(visible.startIndex, visible.endIndex);
+      return true;
+    }
+
+    function commitAccelerometerTimeSelection(){
+      if(!accelerometerViewState) return;
+      zoomAccelerometerSliderToSelection();
+      renderAccelerometerView();
+    }
+
+    function updateAccelerometerSliderScaleControls(){
+      const label = document.getElementById('accelerometerTimeScaleLabel');
+      const resetBtn = document.getElementById('accelerometerTimeResetScaleBtn');
+      const startSlider = document.getElementById('accelerometerTimeStartSlider');
+      const endSlider = document.getElementById('accelerometerTimeEndSlider');
+      if(!accelerometerViewState || !startSlider || !endSlider){
+        if(label) label.textContent = '';
+        if(resetBtn) resetBtn.disabled = true;
+        return;
+      }
+
+      const rows = accelerometerViewState.rows || [];
+      const { minIndex, maxIndex } = getAccelerometerSliderScaleIndexes();
+      const fullMax = Math.max(0, rows.length - 1);
+      const isFullScale = minIndex <= 0 && maxIndex >= fullMax;
+      const scaleStart = rows[minIndex];
+      const scaleEnd = rows[maxIndex];
+
+      if(label){
+        label.textContent = isFullScale
+          ? 'Slider scale: full range'
+          : `Slider scale: ${scaleStart?.timestamp_local || 'Unknown time'} to ${scaleEnd?.timestamp_local || 'Unknown time'}`;
+      }
+      if(resetBtn) resetBtn.disabled = isFullScale;
+    }
+
+    function rowPositionOnAccelerometerTimeScale(row, index, minIndex, maxIndex){
+      const rows = accelerometerViewState?.rows || [];
+      const scaleStartMs = rows[minIndex]?.timestampMs;
+      const scaleEndMs = rows[maxIndex]?.timestampMs;
+      if(Number.isFinite(row?.timestampMs) && Number.isFinite(scaleStartMs) && Number.isFinite(scaleEndMs) && scaleEndMs > scaleStartMs){
+        return (row.timestampMs - scaleStartMs) / (scaleEndMs - scaleStartMs);
+      }
+      const span = maxIndex - minIndex;
+      return span > 0 ? (index - minIndex) / span : 0.5;
+    }
+
+    function drawAccelerometerTimeMarkerCanvas(canvas, minIndex, maxIndex, startIndex, endIndex){
+      if(!canvas || !accelerometerViewState) return;
+      const rect = canvas.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height || 28));
+      const dpr = window.devicePixelRatio || 1;
+      const targetWidth = Math.round(width * dpr);
+      const targetHeight = Math.round(height * dpr);
+      if(canvas.width !== targetWidth) canvas.width = targetWidth;
+      if(canvas.height !== targetHeight) canvas.height = targetHeight;
+
+      const ctx = canvas.getContext('2d');
+      if(!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const rows = accelerometerViewState.rows || [];
+      if(!rows.length || maxIndex < minIndex) return;
+
+      const first = Math.max(0, Math.min(rows.length - 1, minIndex));
+      const last = Math.max(first, Math.min(rows.length - 1, maxIndex));
+      const y = height - 4;
+      const radius = 1.8;
+
+      for(let i = first; i <= last; i++){
+        const row = rows[i];
+        const ratio = Math.max(0, Math.min(1, rowPositionOnAccelerometerTimeScale(row, i, first, last)));
+        const x = ratio * width;
+        const selected = i >= startIndex && i <= endIndex;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = selected ? 'rgba(249,115,22,.78)' : 'rgba(37,99,235,.28)';
+        ctx.fill();
+      }
+    }
+
+    function updateAccelerometerTimeMarkers(){
+      if(!accelerometerViewState) return;
+      const startSlider = document.getElementById('accelerometerTimeStartSlider');
+      const endSlider = document.getElementById('accelerometerTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+      const { minIndex, maxIndex } = getAccelerometerSliderScaleIndexes();
+      const visible = getAccelerometerVisibleRows();
+      const startIndex = visible.rows.length ? visible.startIndex : 1;
+      const endIndex = visible.rows.length ? visible.endIndex : 0;
+      drawAccelerometerTimeMarkerCanvas(document.getElementById('accelerometerTimeMarkers'), minIndex, maxIndex, startIndex, endIndex);
+    }
+
     function updateAccelerometerTimeRangeVisual(){
       const startSlider = document.getElementById('accelerometerTimeStartSlider');
       const endSlider = document.getElementById('accelerometerTimeEndSlider');
       const rangeSlider = document.getElementById('accelerometerTimeRangeSlider');
       if(!startSlider || !endSlider || !rangeSlider) return;
+      const min = Number(startSlider.min);
       const max = Number(endSlider.max);
-      const startPercent = max > 0 ? (Number(startSlider.value) / max) * 100 : 0;
-      const endPercent = max > 0 ? (Number(endSlider.value) / max) * 100 : 100;
+      const span = max - min;
+      const startPercent = span > 0 ? ((Number(startSlider.value) - min) / span) * 100 : 0;
+      const endPercent = span > 0 ? ((Number(endSlider.value) - min) / span) * 100 : 100;
       rangeSlider.style.setProperty('--range-start', `${startPercent}%`);
       rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
+      updateAccelerometerTimeMarkers();
     }
 
     function getAccelerometerVisibleRows(){
@@ -4561,9 +4730,36 @@
       const maxIndex = Math.max(0, rows.length - 1);
       const startSlider = document.getElementById('accelerometerTimeStartSlider');
       const endSlider = document.getElementById('accelerometerTimeEndSlider');
-      const startIndex = Math.max(0, Math.min(maxIndex, startSlider ? Number(startSlider.value) : 0));
-      const endIndex = Math.max(startIndex, Math.min(maxIndex, endSlider ? Number(endSlider.value) : maxIndex));
-      return { rows: rows.slice(startIndex, endIndex + 1), startIndex, endIndex, total: rows.length };
+      const startValue = startSlider ? Number(startSlider.value) : accelerometerSliderValueForRow(0);
+      const endValue = endSlider ? Number(endSlider.value) : accelerometerSliderValueForRow(maxIndex);
+      let startIndex = 0;
+      let endIndex = maxIndex;
+      let visibleRows;
+
+      if(accelerometerSliderUsesTimestamps()){
+        let firstSelectedIndex = -1;
+        visibleRows = rows.filter((row, index) => {
+          const selected = row.timestampMs >= startValue && row.timestampMs <= endValue;
+          if(selected){
+            if(firstSelectedIndex < 0){
+              firstSelectedIndex = index;
+              startIndex = index;
+            }
+            endIndex = index;
+          }
+          return selected;
+        });
+        if(!visibleRows.length){
+          startIndex = rows.findIndex(row => row.timestampMs >= startValue);
+          if(startIndex < 0) startIndex = maxIndex;
+          endIndex = startIndex;
+        }
+      } else {
+        startIndex = Math.max(0, Math.min(maxIndex, startValue));
+        endIndex = Math.max(startIndex, Math.min(maxIndex, endValue));
+        visibleRows = rows.slice(startIndex, endIndex + 1);
+      }
+      return { rows: visibleRows, startIndex, endIndex, total: rows.length };
     }
 
     function updateAccelerometerSliderLabels(){
@@ -4576,6 +4772,7 @@
       if(endLabel) endLabel.textContent = rows[rows.length - 1]?.timestamp_local || 'Unknown time';
       if(currentLabel) currentLabel.textContent = `${rows.length}/${visible.total} records`;
       updateAccelerometerTimeRangeVisual();
+      updateAccelerometerSliderScaleControls();
     }
 
     function renderAccelerometerDashboardRows(rows){
@@ -4612,12 +4809,8 @@
         const endSlider = document.getElementById('accelerometerTimeEndSlider');
         if(sliderWrapper) sliderWrapper.style.display = 'block';
         if(startSlider && endSlider){
-          startSlider.min = endSlider.min = '0';
-          startSlider.max = endSlider.max = String(rows.length - 1);
-          if(resetRange || Number(startSlider.max) !== rows.length - 1){
-            startSlider.value = '0';
-            endSlider.value = endSlider.max;
-          }
+          const rowCountChanged = Number(startSlider.dataset.rowCount) !== rows.length;
+          setAccelerometerSliderScale(0, rows.length - 1, resetRange || rowCountChanged);
           startSlider.disabled = endSlider.disabled = rows.length <= 1;
         }
         renderAccelerometerView();
