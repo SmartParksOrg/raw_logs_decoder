@@ -31,13 +31,35 @@
     #analyticsPanel { display:none; margin-top:0; padding:16px; border:1px solid #ddd; border-radius:8px; background:#fafafa; }
     #analyticsPanel h2 { margin: 0 0 12px; }
 
-    #analyticsPanel .grid{
+    #analyticsPanel .grid,
+    #analyticsPanel .analytics-controls-grid{
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
       gap: 12px 16px;
       align-items: start;
     }
-    #analyticsPanel .grid label { display:block; font-size:12px; color:#444; margin-bottom:4px; }
+    #analyticsPanel .analytics-field-stack{
+      display:grid;
+      gap:10px;
+      margin-bottom:12px;
+    }
+    #analyticsPanel .analytics-field-row{
+      display:grid;
+      grid-template-columns:minmax(220px, .72fr) minmax(0, 1.28fr);
+      gap:12px 16px;
+      align-items:start;
+    }
+    #analyticsPanel .analytics-field-selectors{
+      display:grid;
+      gap:8px;
+    }
+    #analyticsPanel .analytics-controls-grid{
+      grid-template-columns:repeat(4, minmax(180px, 1fr));
+      margin-bottom:12px;
+    }
+    #analyticsPanel .grid label,
+    #analyticsPanel .analytics-field-stack label,
+    #analyticsPanel .analytics-controls-grid label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
 
     #analyticsPanel select,
     #analyticsPanel input[type="text"],
@@ -48,20 +70,39 @@
       box-sizing: border-box;
     }
 
-    #chartWrapper { margin-top:16px; }
+    #chartWrapper { margin-top:16px; height:480px; padding:10px; box-sizing:border-box; }
+    #chartWrapper canvas{ min-height:460px; }
     #statsBox { margin-top:12px; }
-    #statsBox.stats-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; align-items:start; }
-    #statsBox .stats-panel h3{ margin-bottom:6px; }
-    #statsBox table { border-collapse: collapse; }
-    #statsBox td { padding:4px 8px; border-bottom:1px solid #eee; }
+    #statsBox.stats-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:10px; align-items:start; }
+    #statsBox .stats-panel{
+      background:var(--section-bg);
+      border:1px solid var(--section-border);
+      border-radius:8px;
+      padding:10px;
+    }
+    #statsBox .stats-panel h3{ margin:0 0 6px; font-size:13px; }
+    .stats-mini-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(78px, 1fr));
+      gap:6px;
+    }
+    .stats-mini-item{
+      background:rgba(255,255,255,.035);
+      border:1px solid rgba(255,255,255,.06);
+      border-radius:6px;
+      padding:6px;
+      min-width:0;
+    }
+    .stats-mini-label{ color:var(--muted); font-size:10px; margin-bottom:3px; }
+    .stats-mini-value{ font-size:12px; font-weight:700; font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #summaryPanel .summary-table { border-collapse: collapse; width: 100%; max-width: 560px; }
     #summaryPanel .summary-table th, #summaryPanel .summary-table td { padding: 4px 8px; border-bottom: 1px solid #eee; text-align: left; }
 
     /* Map block */
     #map { height: 380px; margin-top:12px; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
-    #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper, #logTimeSliderWrapper{ margin-top:12px; }
-    #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
+    #analyticsTimeSliderWrapper, #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper, #logTimeSliderWrapper, #bleTimeSliderWrapper{ margin-top:12px; }
+    #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
     .time-slider-row{
       display:grid;
       grid-template-columns:minmax(0, 1fr) auto;
@@ -106,9 +147,11 @@
       z-index:1;
     }
     .dual-range input[type="range"]{ z-index:2; }
+    #analyticsTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.32); }
     #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:rgba(15,118,110,.32); }
     #accelerometerTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.32); }
     #logTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.32); }
+    #bleTimeRangeSlider{ --range-selected-color:rgba(22,163,74,.32); }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; margin-top:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
     .map-tools-control{
@@ -310,6 +353,20 @@
     /* Outlier controls */
     .range-values{ display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; }
     .range-values output{ color:var(--text); font-variant-numeric:tabular-nums; }
+    .outlier-range-control{
+      border:1px solid color-mix(in oklab, rgba(249,115,22,.28) 72%, var(--section-border));
+      border-radius:8px;
+      padding:10px 12px;
+      background:linear-gradient(180deg, rgba(249,115,22,.055), rgba(249,115,22,.022));
+    }
+    .outlier-range-control label{
+      color:color-mix(in oklab, #f97316 70%, var(--muted));
+      font-weight:700;
+    }
+    #xRangeSlider,
+    #yRangeSlider{
+      --range-selected-color:rgba(249,115,22,.34);
+    }
     .dual-range{ position:relative; height:28px; --range-start:0%; --range-end:100%; }
     .dual-range-track{
       position:absolute; left:0; right:0; top:12px; height:4px; border-radius:999px;
@@ -339,10 +396,13 @@
     .dim { color:#666; font-size:12px; }
 
     /* Keep outlier rows full width */
-    #outlierXWrapper, #outlierYWrapper { grid-column: 1 / -1; }
+    #outlierXWrapper, #outlierYWrapper { min-width:0; }
 
-    @media (max-width: 600px){
-      #analyticsPanel .grid{ grid-template-columns: 1fr; }
+    @media (max-width: 760px){
+      #analyticsPanel .analytics-field-row,
+      #analyticsPanel .analytics-controls-grid{ grid-template-columns: 1fr; }
+      #chartWrapper{ height:380px; }
+      #chartWrapper canvas{ min-height:380px; }
     }
   </style>
 
@@ -362,6 +422,12 @@
       --shadow: 0 8px 24px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25);
       --gap: 14px;
       --control-bg: color-mix(in oklab, var(--panel) 75%, black);
+      --section-bg: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.012));
+      --section-bg-soft: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
+      --section-border: rgba(255,255,255,.085);
+      --section-border-strong: rgba(255,255,255,.13);
+      --tab-bg: rgba(255,255,255,.055);
+      --tab-bg-hover: rgba(255,255,255,.085);
       --drop-bg: repeating-linear-gradient(45deg, rgba(90,167,255,.08) 0 12px, rgba(90,167,255,.12) 12px 24px);
       --drop-bg-hover: repeating-linear-gradient(45deg, rgba(90,167,255,.14) 0 12px, rgba(90,167,255,.20) 12px 24px);
     }
@@ -371,6 +437,12 @@
         --brand:#2563eb; --brand-2:#16a34a; --success:#16a34a; --danger:#dc2626;
         --shadow: 0 8px 24px rgba(17,24,39,.08), 0 2px 8px rgba(17,24,39,.06);
         --control-bg: color-mix(in oklab, var(--panel) 90%, black);
+        --section-bg: linear-gradient(180deg, rgba(17,24,39,.035), rgba(17,24,39,.012));
+        --section-bg-soft: linear-gradient(180deg, rgba(37,99,235,.045), rgba(17,24,39,.012));
+        --section-border: rgba(17,24,39,.095);
+        --section-border-strong: rgba(17,24,39,.16);
+        --tab-bg: rgba(17,24,39,.045);
+        --tab-bg-hover: rgba(37,99,235,.075);
         --drop-bg: repeating-linear-gradient(45deg, rgba(37,99,235,.06) 0 12px, rgba(37,99,235,.10) 12px 24px);
         --drop-bg-hover: repeating-linear-gradient(45deg, rgba(37,99,235,.12) 0 12px, rgba(37,99,235,.18) 12px 24px);
       }
@@ -381,12 +453,14 @@
 
     /* Cards via <details> for collapsible sections */
     details.card{
-      background:var(--panel);
-      border: 1px solid rgba(255,255,255,.06);
+      background:
+        linear-gradient(180deg, color-mix(in oklab, var(--panel) 96%, white), var(--panel));
+      border: 1px solid var(--section-border);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       padding: 0;
       margin-bottom: 16px;
+      overflow:hidden;
     }
     details.card > summary{
       list-style:none; cursor:pointer;
@@ -394,10 +468,45 @@
       font-weight: 700; letter-spacing:.2px;
       display:flex; align-items:center; gap:8px;
       user-select:none;
+      background:linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,0));
+      border-bottom:1px solid transparent;
     }
+    details.card[open] > summary{ border-bottom-color:var(--section-border); }
     details.card > summary .chev{ transition: transform .15s ease; opacity:.9; }
     details.card[open] > summary .chev{ transform: rotate(90deg); }
-    .section-body{ padding: 0 16px 16px 16px; }
+    .section-body{
+      padding: 16px;
+      background:
+        radial-gradient(circle at top left, rgba(90,167,255,.035), transparent 36%),
+        linear-gradient(180deg, rgba(255,255,255,.018), rgba(255,255,255,0));
+    }
+    .section-body > .grid,
+    #analyticsPanel .analytics-field-row,
+    #analyticsPanel .analytics-controls-grid,
+    #analyticsTimeSliderWrapper,
+    #mapTimeSliderWrapper,
+    #accelerometerTimeSliderWrapper,
+    #bleTimeSliderWrapper,
+    #cmdqTimeSliderWrapper,
+    #logTimeSliderWrapper,
+    #chartWrapper,
+    #mapWrapper,
+    .science-note{
+      background:var(--section-bg);
+      border:1px solid var(--section-border);
+      border-radius:8px;
+    }
+    .section-body > .grid,
+    #analyticsPanel .analytics-field-row,
+    #analyticsPanel .analytics-controls-grid,
+    #analyticsTimeSliderWrapper,
+    #mapTimeSliderWrapper,
+    #accelerometerTimeSliderWrapper,
+    #bleTimeSliderWrapper,
+    #cmdqTimeSliderWrapper,
+    #logTimeSliderWrapper{
+      padding:12px;
+    }
 
     /* Inputs & buttons */
     select, input[type="text"], input[type="number"], input[type="datetime-local"]{
@@ -422,7 +531,12 @@
       display:inline-block; text-align:center;
     }
     .btn:active{ transform: translateY(1px); }
-    .btn.secondary{ background: var(--bg-elev); color: var(--text); }
+    .btn.secondary{
+      background:var(--tab-bg);
+      color:var(--text);
+      border-color:var(--section-border-strong);
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+    }
     .btn.primary{ background: linear-gradient(180deg, var(--brand), color-mix(in oklab, var(--brand) 80%, black)); color:#fff; }
     .btn.success{ background: linear-gradient(180deg, var(--success), color-mix(in oklab, var(--success) 80%, black)); color:#fff; }
 
@@ -441,7 +555,11 @@
     #dropArea.hover{ border-color: var(--brand); background: var(--drop-bg-hover); color: var(--text); }
 
     #summaryPanel{ display:none; }
-    #analyticsPanel{ background: var(--panel); border:1px solid rgba(255,255,255,.08); border-radius: var(--radius); }
+    #analyticsPanel{
+      background: var(--section-bg);
+      border:1px solid var(--section-border);
+      border-radius: 8px;
+    }
 
     .tabulator{ background: var(--bg-elev); border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
     .tabulator .tabulator-header{ background:transparent; border-bottom:1px solid rgba(255,255,255,.08); }
@@ -459,6 +577,10 @@
       grid-template-columns: repeat(3, minmax(220px, 1fr));
       gap: 12px 16px;
       align-items:start;
+      background:var(--section-bg);
+      border:1px solid var(--section-border);
+      border-radius:8px;
+      padding:12px;
     }
     @media (max-width: 1100px){ .controls-grid{ grid-template-columns: repeat(2, minmax(220px, 1fr)); } }
     @media (max-width: 680px){ .controls-grid{ grid-template-columns: 1fr; } }
@@ -479,8 +601,8 @@
       margin: 12px 0;
     }
     .metric-tile{
-      background: var(--bg-elev);
-      border: 1px solid rgba(255,255,255,.08);
+      background: var(--section-bg-soft);
+      border: 1px solid var(--section-border);
       border-radius: 8px;
       padding: 12px;
       min-width:0;
@@ -489,8 +611,8 @@
     .metric-tile .metric-value{ font-size:24px; line-height:1.1; font-weight:700; font-variant-numeric:tabular-nums; }
     .metric-tile .metric-sub{ color:var(--muted); font-size:12px; margin-top:6px; }
     .dashboard-panel{
-      background: var(--bg-elev);
-      border: 1px solid rgba(255,255,255,.08);
+      background: var(--section-bg);
+      border: 1px solid var(--section-border);
       border-radius: 8px;
       padding: 12px;
       min-width:0;
@@ -532,17 +654,32 @@
       gap:8px;
       flex-wrap:wrap;
       margin: 12px 0;
+      padding:6px;
+      background:var(--section-bg);
+      border:1px solid var(--section-border);
+      border-radius:999px;
+      width:max-content;
+      max-width:100%;
     }
     .tab-button{
       appearance:none;
-      border:1px solid rgba(255,255,255,.12);
-      background:var(--bg-elev);
+      border:1px solid var(--section-border-strong);
+      background:var(--tab-bg);
       color:var(--text);
       border-radius:999px;
       padding:7px 12px;
       cursor:pointer;
       font-weight:600;
       margin:0;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+      transition:background .15s ease, border-color .15s ease, color .15s ease, transform .04s ease;
+    }
+    .tab-button:hover{
+      background:var(--tab-bg-hover);
+      border-color:color-mix(in oklab, var(--section-border-strong) 65%, var(--brand));
+    }
+    .tab-button:active{
+      transform:translateY(1px);
     }
     .tab-button.active{
       background:linear-gradient(180deg, var(--brand), color-mix(in oklab, var(--brand) 80%, black));
@@ -595,6 +732,7 @@
     }
     .science-note{
       margin:10px 0 0;
+      padding:10px 12px;
       color:var(--muted);
       font-size:12px;
       line-height:1.45;
@@ -726,18 +864,63 @@
       <summary><span class="chev">▸</span> Simple Analytics (tables, charts & statistics)</summary>
       <div class="section-body">
         <div id="analyticsPanel">
-          <div class="grid">
+          <div class="analytics-field-stack">
+            <div class="analytics-field-row">
+              <div>
+                <label for="fieldSelect">Field X</label>
+                <select id="fieldSelect"></select>
+              </div>
+              <div id="outlierXWrapper" class="outlier-range-control">
+                <label id="outlierXLabel">Value range X</label>
+                <div class="range-values">
+                  <span>Min: <output id="minXValue">—</output></span>
+                  <span>Max: <output id="maxXValue">—</output></span>
+                </div>
+                <div class="dual-range" id="xRangeSlider">
+                  <div class="dual-range-track"></div>
+                  <input id="minX" type="range" aria-label="Minimum X value" />
+                  <input id="maxX" type="range" aria-label="Maximum X value" />
+                </div>
+                <div class="dim" id="xRangeHint"></div>
+              </div>
+            </div>
+
+            <div id="analyticsYFieldRow" class="analytics-field-row">
+              <div class="analytics-field-selectors">
+                <div id="secondFieldWrapper">
+                  <label for="fieldSelect2">Field Y / second field</label>
+                  <select id="fieldSelect2"><option value="">—</option></select>
+                </div>
+                <div id="scatterYFieldWrapper">
+                  <label for="fieldSelectY">Field Y</label>
+                  <select id="fieldSelectY"><option value="">—</option></select>
+                </div>
+              </div>
+              <div id="outlierYWrapper" class="outlier-range-control" style="display:none;">
+                <label id="outlierYLabel">Value range Y</label>
+                <div class="range-values">
+                  <span>Min: <output id="minYValue">—</output></span>
+                  <span>Max: <output id="maxYValue">—</output></span>
+                </div>
+                <div class="dual-range" id="yRangeSlider">
+                  <div class="dual-range-track"></div>
+                  <input id="minY" type="range" aria-label="Minimum Y value" />
+                  <input id="maxY" type="range" aria-label="Maximum Y value" />
+                </div>
+                <div class="dim" id="yRangeHint"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="analytics-controls-grid">
             <div>
-              <label for="fieldSelect">Field (X)</label>
-              <select id="fieldSelect"></select>
-            </div>
-            <div id="secondFieldWrapper">
-              <label for="fieldSelect2">Second Field (line – optional)</label>
-              <select id="fieldSelect2"><option value="">—</option></select>
-            </div>
-            <div id="scatterYFieldWrapper">
-              <label for="fieldSelectY">Field (Y, for scatter – optional)</label>
-              <select id="fieldSelectY"><option value="">—</option></select>
+              <label for="chartType">Chart type</label>
+              <select id="chartType">
+                <option value="line" selected>Line (time series)</option>
+                <option value="bar">Bar</option>
+                <option value="scatter">Scatter (X vs Y)</option>
+                <option value="hist">Histogram</option>
+              </select>
             </div>
             <div>
               <label for="bucketSelect">Time bucket</label>
@@ -760,73 +943,43 @@
                 <option value="stdev">Std.dev.</option>
               </select>
             </div>
-
-            <!-- Outlier filter: X -->
-            <div id="outlierXWrapper">
-              <label id="outlierXLabel">Outlier filter (X)</label>
-              <div class="range-values">
-                <span>Min: <output id="minXValue">—</output></span>
-                <span>Max: <output id="maxXValue">—</output></span>
-              </div>
-              <div class="dual-range" id="xRangeSlider">
-                <div class="dual-range-track"></div>
-                <input id="minX" type="range" aria-label="Minimum X value" />
-                <input id="maxX" type="range" aria-label="Maximum X value" />
-              </div>
-              <div class="dim" id="xRangeHint"></div>
-            </div>
-
-            <!-- Outlier filter: active secondary field -->
-            <div id="outlierYWrapper" style="display:none;">
-              <label id="outlierYLabel">Outlier filter (Y)</label>
-              <div class="range-values">
-                <span>Min: <output id="minYValue">—</output></span>
-                <span>Max: <output id="maxYValue">—</output></span>
-              </div>
-              <div class="dual-range" id="yRangeSlider">
-                <div class="dual-range-track"></div>
-                <input id="minY" type="range" aria-label="Minimum Y value" />
-                <input id="maxY" type="range" aria-label="Maximum Y value" />
-              </div>
-              <div class="dim" id="yRangeHint"></div>
-            </div>
-
-            <div>
-              <label for="chartType">Chart type</label>
-              <select id="chartType">
-                <option value="line" selected>Line (time series)</option>
-                <option value="bar">Bar</option>
-                <option value="scatter">Scatter (X vs Y)</option>
-                <option value="hist">Histogram</option>
-              </select>
-            </div>
             <div>
               <label for="portFilter">Filter: Port</label>
               <select id="portFilter">
                 <option value="">All available ports</option>
               </select>
             </div>
-            <div>
-              <label for="startTime">From</label>
-              <input id="startTime" type="datetime-local" step="1" />
+          </div>
+
+          <div id="analyticsTimeSliderWrapper" style="display:none;">
+            <label>Analytics time range</label>
+            <div class="time-slider-row">
+              <div class="dual-range" id="analyticsTimeRangeSlider">
+                <div class="dual-range-track"></div>
+                <canvas id="analyticsTimeMarkers" class="time-marker-canvas" aria-hidden="true"></canvas>
+                <input id="analyticsTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Analytics start time" />
+                <input id="analyticsTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Analytics end time" />
+              </div>
+              <button type="button" id="analyticsTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
             </div>
-            <div>
-              <label for="endTime">To</label>
-              <input id="endTime" type="datetime-local" step="1" />
+            <div id="analyticsTimeSliderLabels" class="dim">
+              <span id="analyticsTimeStartLabel"></span>
+              <strong id="analyticsTimeCurrentLabel"></strong>
+              <span id="analyticsTimeEndLabel"></span>
             </div>
-            <div>
-              <label class="muted">&nbsp;</label>
-              <button id="genBtn" class="btn">Generate</button>
-            </div>
-            <div>
-              <label class="muted">&nbsp;</label>
-              <button id="downloadAggBtn" class="btn secondary">Download result CSV</button>
+            <div class="time-scale-row">
+              <span id="analyticsTimeScaleLabel" class="dim"></span>
             </div>
           </div>
 
           <div id="statsBox"></div>
           <div id="chartWrapper" class="visual-wrapper">
-            <canvas id="chartCanvas" height="340"></canvas>
+            <canvas id="chartCanvas" height="460"></canvas>
           </div>
           <div id="aggTable" style="margin-top:12px;"></div>
         </div>
@@ -846,34 +999,9 @@
                 <option value="">All available location ports</option>
               </select>
             </div>
-            <div class="control">
-              <label for="mapStartTime">From (Map)</label>
-              <input id="mapStartTime" type="datetime-local" step="1" />
-            </div>
-            <div class="control">
-              <label for="mapEndTime">To (Map)</label>
-              <input id="mapEndTime" type="datetime-local" step="1" />
-            </div>
-
-            <div class="control" id="latFieldWrapper">
-              <label for="latField">Latitude field</label>
-              <select id="latField"><option value="">—</option></select>
-            </div>
-            <div class="control" id="lonFieldWrapper">
-              <label for="lonField">Longitude field</label>
-              <select id="lonField"><option value="">—</option></select>
-            </div>
             <div class="control" id="zeroFilterWrapper">
               <label>Coordinate filter</label>
               <label><input type="checkbox" id="ignoreZeroCoords" checked> Ignore lat=0 or lon=0</label>
-            </div>
-            <div class="control">
-              <label class="muted">&nbsp;</label>
-              <button id="genMapBtn" class="btn">Generate Map</button>
-            </div>
-            <div class="control">
-              <label class="muted">&nbsp;</label>
-              <button id="downloadMapBtn" class="btn secondary">Download Map CSV</button>
             </div>
           </div>
 
@@ -946,7 +1074,7 @@
           <div id="mapStatsBox" style="margin-top:12px;"></div>
           <div id="mapCharts" class="dashboard-grid" style="margin-top:12px;"></div>
           <div id="mapTable" style="margin-top:12px;"></div>
-          <p class="muted" style="margin-top:8px;">Tip: Map uses its own Port/From/To filters above.</p>
+          <p class="muted" style="margin-top:8px;">Tip: Map uses its own port filter and time slider.</p>
         </div>
       </div>
     </details>
@@ -956,17 +1084,6 @@
       <summary><span class="chev">▸</span> Accelerometer Motion</summary>
       <div class="section-body">
         <div id="accelerometerPanel" style="display:none;">
-          <div class="controls-grid">
-            <div class="control">
-              <label class="muted">&nbsp;</label>
-              <button id="genAccelerometerBtn" class="btn">Generate</button>
-            </div>
-            <div class="control">
-              <label class="muted">&nbsp;</label>
-              <button id="downloadAccelerometerBtn" class="btn secondary">Download Motion CSV</button>
-            </div>
-          </div>
-
           <div id="accelerometerSummary" class="metric-strip"></div>
           <p class="science-note">Dynamic body acceleration metrics are exploratory proxies for movement intensity. Interpretation depends on tag placement, sensor units, sampling rate, and species-specific validation.</p>
 
@@ -1007,18 +1124,29 @@
       <summary><span class="chev">▸</span> BLE Scan Results</summary>
       <div class="section-body">
         <div id="bleScanPanel" style="display:none;">
-          <div class="controls-grid">
-            <div class="control">
-              <label for="bleStartTime">From (BLE)</label>
-              <input id="bleStartTime" type="datetime-local" step="1" />
+          <div id="bleTimeSliderWrapper" style="display:none;">
+            <label>BLE scan time range</label>
+            <div class="time-slider-row">
+              <div class="dual-range" id="bleTimeRangeSlider">
+                <div class="dual-range-track"></div>
+                <canvas id="bleTimeMarkers" class="time-marker-canvas" aria-hidden="true"></canvas>
+                <input id="bleTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="BLE scan start time" />
+                <input id="bleTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="BLE scan end time" />
+              </div>
+              <button type="button" id="bleTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
             </div>
-            <div class="control">
-              <label for="bleEndTime">To (BLE)</label>
-              <input id="bleEndTime" type="datetime-local" step="1" />
+            <div id="bleTimeSliderLabels" class="dim">
+              <span id="bleTimeStartLabel"></span>
+              <strong id="bleTimeCurrentLabel"></strong>
+              <span id="bleTimeEndLabel"></span>
             </div>
-            <div class="control">
-              <label class="muted">&nbsp;</label>
-              <button id="genBleBtn" class="btn">Generate</button>
+            <div class="time-scale-row">
+              <span id="bleTimeScaleLabel" class="dim"></span>
             </div>
           </div>
           <div id="bleScanSummary"></div>
@@ -1035,12 +1163,6 @@
       <summary><span class="chev">▸</span> Cardiac Monitoring Device Q</summary>
       <div class="section-body">
         <div id="cmdqPanel" style="display:none;">
-          <div class="controls-grid">
-            <div class="control" style="grid-column: 1 / -1;">
-              <label class="muted">&nbsp;</label>
-              <button id="genCmdqBtn" class="btn">Generate</button>
-            </div>
-          </div>
           <div id="cmdqSummary" class="metric-strip"></div>
           <div id="cmdqTimeSliderWrapper" style="display:none;">
             <label>CMDQ time range</label>
@@ -2218,17 +2340,12 @@
       runWithRenderingBusy("Preparing analytics", "Building chart controls and default statistics...", () => ensureAnalyticsPrepared(shouldRenderDefault));
     }
 
-    function showMapPanelIfNeeded(){
+    function renderMapIfNeeded(force=false){
       if(!hasDecodedResults()) return;
-      runWithRenderingBusy("Preparing map controls", "Indexing location fields and time filters...", () => {
-        ensureAnalyticsPrepared(false);
-        const panel = document.getElementById('mapPanel');
-        if(panel) panel.style.display = 'block';
-      });
-    }
-
-    function renderMapIfNeeded(){
-      if(!hasDecodedResults()) return;
+      if(!force && mapViewState){
+        resizeMapSoon();
+        return;
+      }
       runWithRenderingBusy("Rendering map", "Filtering locations and drawing visible points...", () => {
         ensureAnalyticsPrepared(false);
         generateMap();
@@ -2249,8 +2366,8 @@
       if(!hasDecodedResults()) return;
       const panel = document.getElementById('bleScanPanel');
       if(!force && panel && panel.style.display === 'block') return;
-      const resetDateRange = !bleScanTableRef && !bleScanChartRef;
-      runWithRenderingBusy("Rendering BLE scan results", "Collecting detections and drawing RSSI trends...", () => renderBleScanPanel(decodedOutput, resetDateRange));
+      const resetRange = !bleScanViewState;
+      runWithRenderingBusy("Rendering BLE scan results", "Collecting detections and drawing RSSI trends...", () => renderBleScanPanel(decodedOutput, resetRange));
     }
 
     function renderCmdqIfNeeded(force=false){
@@ -2274,7 +2391,7 @@
 
     function initLazyRendering(){
       bindLazyCard('analyticsCard', () => renderAnalyticsIfNeeded(true));
-      bindLazyCard('mapCard', showMapPanelIfNeeded);
+      bindLazyCard('mapCard', () => renderMapIfNeeded(false));
       bindLazyCard('accelerometerCard', renderAccelerometerIfNeeded);
       bindLazyCard('bleScanCard', renderBleScanIfNeeded);
       bindLazyCard('cmdqCard', renderCmdqIfNeeded);
@@ -2287,12 +2404,6 @@
       initCmdqTabs();
       initMapTabs();
       initMapFullscreen();
-      const genBleBtn = document.getElementById('genBleBtn');
-      if(genBleBtn){ genBleBtn.onclick = () => renderBleScanIfNeeded(true); }
-      const genCmdqBtn = document.getElementById('genCmdqBtn');
-      if(genCmdqBtn){ genCmdqBtn.onclick = () => renderCmdqIfNeeded(true); }
-      const genAccelerometerBtn = document.getElementById('genAccelerometerBtn');
-      if(genAccelerometerBtn){ genAccelerometerBtn.onclick = () => renderAccelerometerIfNeeded(true); }
       ['cmdqTimeStartSlider','cmdqTimeEndSlider'].forEach(id => {
         const slider = document.getElementById(id);
         if(!slider) return;
@@ -2313,16 +2424,24 @@
       });
       const accelerometerTimeResetScaleBtn = document.getElementById('accelerometerTimeResetScaleBtn');
       if(accelerometerTimeResetScaleBtn) accelerometerTimeResetScaleBtn.onclick = () => resetAccelerometerSliderScale();
-      ['startTime','endTime','mapStartTime','mapEndTime','bleStartTime','bleEndTime'].forEach((id) => {
-        const input = document.getElementById(id);
-        if(input) input.addEventListener('input', () => { input.dataset.userEdited = 'true'; });
+      ['bleTimeStartSlider','bleTimeEndSlider'].forEach(id => {
+        const slider = document.getElementById(id);
+        if(!slider) return;
+        slider.oninput = () => {
+          constrainBleTimeRange(id === 'bleTimeStartSlider' ? 'start' : 'end');
+          updateBleSliderLabels();
+        };
+        slider.onchange = () => commitBleTimeSelection();
       });
+      const bleTimeResetScaleBtn = document.getElementById('bleTimeResetScaleBtn');
+      if(bleTimeResetScaleBtn) bleTimeResetScaleBtn.onclick = () => resetBleSliderScale();
     });
 
     // =========================
     //    ANALYTICS MODULE
     // =========================
     let analyticsCache = null;
+    let analyticsTimeViewState = null;
     let chartRef = null;
     let aggTableRef = null;
     let outputTableRef = null;
@@ -2343,6 +2462,7 @@
     let mapToolsContent = null;
     let bleScanTableRef = null;
     let bleScanChartRef = null;
+    let bleScanViewState = null;
     let accelerometerTableRef = null;
     let accelerometerChartRefs = [];
     let accelerometerViewState = null;
@@ -2367,11 +2487,13 @@
       destroyAccelerometerDashboard();
       if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
       if(bleScanChartRef){ try { bleScanChartRef.destroy(); } catch(e){} bleScanChartRef = null; }
+      bleScanViewState = null;
       destroyCmdqDashboard();
       if(mapPointsLayer) mapPointsLayer.clearLayers();
       if(mapTrackLayer) mapTrackLayer.clearLayers();
       if(mapWarningLayer) mapWarningLayer.clearLayers();
       analyticsCache = null;
+      analyticsTimeViewState = null;
       mapViewState = null;
       mapActiveTab = 'track';
       mapLayerPrefs = { points:true, track:true, heatmap:true, warnings:true };
@@ -2415,14 +2537,6 @@
       buildAnalyticsUI(numericFields);
       populateAnalyticsPortFilter(normalized);
       populateMapPortFilter(normalized);
-      setDateRangeFromRows(normalized, 'startTime', 'endTime', row => row.timestamp_utc, true);
-      setDateRangeFromRows(
-        normalized.filter(row => String(row.source_port) === '29' && MAP_LOCATION_PORTS.has(String(row.port))),
-        'mapStartTime',
-        'mapEndTime',
-        row => row.timestamp_utc,
-        true
-      );
 
       // Show panels only after data is ready
       document.getElementById('analyticsPanel').style.display = 'block';
@@ -2460,33 +2574,35 @@
       const selX = document.getElementById('fieldSelect');
       const sel2 = document.getElementById('fieldSelect2');
       const selY = document.getElementById('fieldSelectY');
-      const selLat = document.getElementById('latField');
-      const selLon = document.getElementById('lonField');
       selX.innerHTML = '';
       sel2.innerHTML = '<option value="">—</option>';
       selY.innerHTML = '<option value="">—</option>';
-      if(selLat) selLat.innerHTML = '<option value="">—</option>';
-      if(selLon) selLon.innerHTML = '<option value="">—</option>';
       numericFields.forEach(k => {
         const o1 = document.createElement('option'); o1.value=k; o1.textContent=k; selX.appendChild(o1);
         const o2a = document.createElement('option'); o2a.value=k; o2a.textContent=k; sel2.appendChild(o2a);
         const o2b = document.createElement('option'); o2b.value=k; o2b.textContent=k; selY.appendChild(o2b);
-        if(selLat){ const o3 = document.createElement('option'); o3.value=k; o3.textContent=k; selLat.appendChild(o3); }
-        if(selLon){ const o4 = document.createElement('option'); o4.value=k; o4.textContent=k; selLon.appendChild(o4); }
       });
 
-      // Hook up buttons
-      document.getElementById('genBtn').onclick = generateAnalysis;
-      document.getElementById('downloadAggBtn').onclick = downloadAggregateCSV;
+      ['analyticsTimeStartSlider','analyticsTimeEndSlider'].forEach(id => {
+        const slider = document.getElementById(id);
+        if(!slider) return;
+        slider.oninput = () => {
+          constrainAnalyticsTimeRange(id === 'analyticsTimeStartSlider' ? 'start' : 'end');
+          updateAnalyticsTimeSliderLabels();
+        };
+        slider.onchange = () => commitAnalyticsTimeSelection();
+      });
+      const analyticsTimeResetScaleBtn = document.getElementById('analyticsTimeResetScaleBtn');
+      if(analyticsTimeResetScaleBtn) analyticsTimeResetScaleBtn.onclick = () => resetAnalyticsTimeSliderScale();
       const ct = document.getElementById('chartType');
       if(ct){ ct.onchange = () => { updateChartUI(); resetOutlierY(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
       updateChartUI();
       toggleOutlierUI();
 
-      const genMapBtn = document.getElementById('genMapBtn');
-      if(genMapBtn){ genMapBtn.onclick = renderMapIfNeeded; }
-      const dlMapBtn = document.getElementById('downloadMapBtn');
-      if(dlMapBtn){ dlMapBtn.onclick = downloadMapCSV; }
+      const mapPortFilter = document.getElementById('mapPortFilter');
+      if(mapPortFilter) mapPortFilter.onchange = () => renderMapIfNeeded(true);
+      const ignoreZeroCoords = document.getElementById('ignoreZeroCoords');
+      if(ignoreZeroCoords) ignoreZeroCoords.onchange = () => renderMapIfNeeded(true);
       ['mapTimeStartSlider','mapTimeEndSlider'].forEach(id => {
         const slider = document.getElementById(id);
         if(!slider) return;
@@ -2514,10 +2630,13 @@
       if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
       if(sel2){ sel2.onchange = () => { resetOutlierY(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
       if(selY){ selY.onchange = () => { resetOutlierY(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
-      ['portFilter','startTime','endTime'].forEach(id => {
-        const el = document.getElementById(id);
-        if(el) el.onchange = () => { resetOutlierX(); resetOutlierY(); scheduleGenerateAnalysis(); };
-      });
+      const portFilter = document.getElementById('portFilter');
+      if(portFilter) portFilter.onchange = () => {
+        analyticsTimeViewState = null;
+        resetOutlierX();
+        resetOutlierY();
+        scheduleGenerateAnalysis();
+      };
       ['bucketSelect','aggSelect'].forEach(id => {
         const el = document.getElementById(id);
         if(el) el.onchange = scheduleGenerateAnalysis;
@@ -2538,63 +2657,265 @@
       const isLine = ct === 'line';
       const y2W = document.getElementById('secondFieldWrapper');
       const scatterYW = document.getElementById('scatterYFieldWrapper');
+      const yRow = document.getElementById('analyticsYFieldRow');
       if(y2W) y2W.style.display = isLine ? 'block' : 'none';
       if(scatterYW) scatterYW.style.display = ct === 'scatter' ? 'block' : 'none';
-    }
-
-    function parseLocalDateTimeInput(el){
-      if(!el.value) return null;
-      const d = new Date(el.value);
-      if (isNaN(d.getTime())) return null;
-      return d;
-    }
-
-    function formatDateTimeLocal(timestamp){
-      const d = new Date(timestamp);
-      if(!Number.isFinite(d.getTime())) return '';
-      const pad = value => String(value).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-    }
-
-    function dateRangeWasEdited(startId, endId){
-      const start = document.getElementById(startId);
-      const end = document.getElementById(endId);
-      return (start && start.dataset.userEdited === 'true') || (end && end.dataset.userEdited === 'true');
-    }
-
-    function setDateRangeFromRows(rows, startId, endId, getTimestamp, resetUserEdited=false){
-      const start = document.getElementById(startId);
-      const end = document.getElementById(endId);
-      if(!start || !end) return false;
-
-      let minTimestamp = Infinity;
-      let maxTimestamp = -Infinity;
-      (rows || []).forEach(row => {
-        const value = getTimestamp(row);
-        const timestamp = typeof value === 'number' ? value : Date.parse(value || '');
-        if(!Number.isFinite(timestamp)) return;
-        minTimestamp = Math.min(minTimestamp, timestamp);
-        maxTimestamp = Math.max(maxTimestamp, timestamp);
-      });
-      if(!Number.isFinite(minTimestamp)){
-        start.value = '';
-        end.value = '';
-      } else {
-        start.value = formatDateTimeLocal(minTimestamp);
-        end.value = formatDateTimeLocal(maxTimestamp);
-      }
-      if(resetUserEdited){
-        start.dataset.userEdited = 'false';
-        end.dataset.userEdited = 'false';
-      }
-      return Number.isFinite(minTimestamp);
+      if(yRow) yRow.style.display = (isLine || ct === 'scatter') ? 'grid' : 'none';
     }
 
     function getFilters(){
       const p = document.getElementById('portFilter').value.trim();
-      const start = parseLocalDateTimeInput(document.getElementById('startTime'));
-      const end = parseLocalDateTimeInput(document.getElementById('endTime'));
-      return { port: p || null, start, end };
+      return { port: p || null };
+    }
+
+    function getAnalyticsTimeControls(){
+      return {
+        wrapper: document.getElementById('analyticsTimeSliderWrapper'),
+        range: document.getElementById('analyticsTimeRangeSlider'),
+        markers: document.getElementById('analyticsTimeMarkers'),
+        start: document.getElementById('analyticsTimeStartSlider'),
+        end: document.getElementById('analyticsTimeEndSlider'),
+        reset: document.getElementById('analyticsTimeResetScaleBtn'),
+        startLabel: document.getElementById('analyticsTimeStartLabel'),
+        endLabel: document.getElementById('analyticsTimeEndLabel'),
+        currentLabel: document.getElementById('analyticsTimeCurrentLabel'),
+        scaleLabel: document.getElementById('analyticsTimeScaleLabel')
+      };
+    }
+
+    function collectAnalyticsTimeRows(rows){
+      return (rows || [])
+        .map((row, originalIndex) => {
+          const timestampMs = row.timestamp_utc ? Date.parse(row.timestamp_utc) : NaN;
+          return { row, originalIndex, timestampMs };
+        })
+        .filter(item => Number.isFinite(item.timestampMs))
+        .sort((a, b) => a.timestampMs - b.timestampMs || a.originalIndex - b.originalIndex);
+    }
+
+    function analyticsTimeDataKey(rows, timeRows){
+      const first = timeRows[0]?.timestampMs ?? '';
+      const last = timeRows[timeRows.length - 1]?.timestampMs ?? '';
+      const port = document.getElementById('portFilter')?.value || '';
+      return `${port}|${rows.length}|${timeRows.length}|${first}|${last}`;
+    }
+
+    function analyticsTimeValueAt(index){
+      const item = analyticsTimeViewState?.timeRows?.[index];
+      return item ? item.timestampMs : null;
+    }
+
+    function getAnalyticsTimeSliderScaleIndexes(){
+      const { start, end } = getAnalyticsTimeControls();
+      if(!start || !end) return { minIndex: 0, maxIndex: 0 };
+      return {
+        minIndex: Number(start.dataset.scaleMinIndex) || 0,
+        maxIndex: Number(end.dataset.scaleMaxIndex) || 0
+      };
+    }
+
+    function setAnalyticsTimeSliderScale(minIndex, maxIndex, resetSelection=false){
+      if(!analyticsTimeViewState) return;
+      const { start, end } = getAnalyticsTimeControls();
+      if(!start || !end || !analyticsTimeViewState.timeRows.length) return;
+
+      const maxAvailable = analyticsTimeViewState.timeRows.length - 1;
+      const min = Math.max(0, Math.min(maxAvailable, Math.floor(minIndex)));
+      const max = Math.max(min, Math.min(maxAvailable, Math.ceil(maxIndex)));
+      const minValue = analyticsTimeValueAt(min);
+      const maxValue = analyticsTimeValueAt(max);
+      if(minValue == null || maxValue == null) return;
+      const currentStart = resetSelection ? minValue : Math.max(minValue, Math.min(maxValue, Number(start.value) || minValue));
+      const currentEnd = resetSelection ? maxValue : Math.max(currentStart, Math.min(maxValue, Number(end.value) || maxValue));
+
+      start.min = end.min = String(minValue);
+      start.max = end.max = String(maxValue);
+      start.value = String(currentStart);
+      end.value = String(currentEnd);
+      start.dataset.scaleMinIndex = end.dataset.scaleMinIndex = String(min);
+      start.dataset.scaleMaxIndex = end.dataset.scaleMaxIndex = String(max);
+      updateAnalyticsTimeSliderLabels();
+      afterNextPaint(() => updateAnalyticsTimeMarkers());
+    }
+
+    function constrainAnalyticsTimeRange(changedHandle){
+      const { start, end } = getAnalyticsTimeControls();
+      if(!start || !end) return;
+      if(Number(start.value) > Number(end.value)){
+        if(changedHandle === 'start') end.value = start.value;
+        else start.value = end.value;
+      }
+    }
+
+    function isAnalyticsTimeFullScale(){
+      if(!analyticsTimeViewState?.timeRows?.length) return true;
+      const { minIndex, maxIndex } = getAnalyticsTimeSliderScaleIndexes();
+      return minIndex <= 0 && maxIndex >= analyticsTimeViewState.timeRows.length - 1;
+    }
+
+    function isAnalyticsTimeSelectionFullScale(){
+      const { start, end } = getAnalyticsTimeControls();
+      if(!start || !end) return true;
+      return Number(start.value) <= Number(start.min) && Number(end.value) >= Number(end.max);
+    }
+
+    function getAnalyticsVisibleRows(){
+      if(!analyticsTimeViewState) return { rows: [], startIndex: 0, endIndex: 0, total: 0 };
+      const rows = analyticsTimeViewState.rows || [];
+      const timeRows = analyticsTimeViewState.timeRows || [];
+      const { start, end } = getAnalyticsTimeControls();
+      if(timeRows.length < 2 || !start || !end){
+        return { rows, startIndex: 0, endIndex: Math.max(0, timeRows.length - 1), total: rows.length };
+      }
+
+      const startValue = Number(start.value);
+      const endValue = Number(end.value);
+      const fullSelection = isAnalyticsTimeFullScale() && isAnalyticsTimeSelectionFullScale();
+      if(fullSelection){
+        return { rows, startIndex: 0, endIndex: timeRows.length - 1, total: rows.length };
+      }
+
+      let startIndex = 0;
+      let endIndex = Math.max(0, timeRows.length - 1);
+      let firstSelectedIndex = -1;
+      const selected = timeRows.filter((item, index) => {
+        const matches = item.timestampMs >= startValue && item.timestampMs <= endValue;
+        if(matches){
+          if(firstSelectedIndex < 0){
+            firstSelectedIndex = index;
+            startIndex = index;
+          }
+          endIndex = index;
+        }
+        return matches;
+      });
+      if(!selected.length){
+        startIndex = timeRows.findIndex(item => item.timestampMs >= startValue);
+        if(startIndex < 0) startIndex = timeRows.length - 1;
+        endIndex = startIndex;
+      }
+      return { rows: selected.map(item => item.row), startIndex, endIndex, total: rows.length };
+    }
+
+    function updateAnalyticsTimeRangeVisual(){
+      const { start, end, range } = getAnalyticsTimeControls();
+      if(!start || !end || !range) return;
+      const min = Number(start.min);
+      const max = Number(end.max);
+      const span = max - min;
+      const startPercent = span > 0 ? ((Number(start.value) - min) / span) * 100 : 0;
+      const endPercent = span > 0 ? ((Number(end.value) - min) / span) * 100 : 100;
+      range.style.setProperty('--range-start', `${startPercent}%`);
+      range.style.setProperty('--range-end', `${endPercent}%`);
+      updateAnalyticsTimeMarkers();
+    }
+
+    function updateAnalyticsTimeMarkers(){
+      if(!analyticsTimeViewState) return;
+      const { markers, start, end } = getAnalyticsTimeControls();
+      if(!markers || !start || !end) return;
+      const timeRows = analyticsTimeViewState.timeRows || [];
+      const { minIndex, maxIndex } = getAnalyticsTimeSliderScaleIndexes();
+      if(!timeRows.length || maxIndex < minIndex) return;
+
+      const rect = markers.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height || 28));
+      const dpr = window.devicePixelRatio || 1;
+      const targetWidth = Math.round(width * dpr);
+      const targetHeight = Math.round(height * dpr);
+      if(markers.width !== targetWidth) markers.width = targetWidth;
+      if(markers.height !== targetHeight) markers.height = targetHeight;
+
+      const ctx = markers.getContext('2d');
+      if(!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const minValue = analyticsTimeValueAt(minIndex);
+      const maxValue = analyticsTimeValueAt(maxIndex);
+      if(minValue == null || maxValue == null) return;
+      const span = maxValue - minValue;
+      const selectedStart = Number(start.value);
+      const selectedEnd = Number(end.value);
+      const y = height - 4;
+      for(let i = minIndex; i <= maxIndex; i++){
+        const value = timeRows[i].timestampMs;
+        const ratio = span > 0 ? (value - minValue) / span : 0.5;
+        const x = Math.max(0, Math.min(1, ratio)) * width;
+        const selected = value >= selectedStart && value <= selectedEnd;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.7, 0, Math.PI * 2);
+        ctx.fillStyle = selected ? 'rgba(249,115,22,.78)' : 'rgba(90,167,255,.28)';
+        ctx.fill();
+      }
+    }
+
+    function updateAnalyticsTimeSliderLabels(){
+      const { start, end, startLabel, endLabel, currentLabel, scaleLabel, reset } = getAnalyticsTimeControls();
+      if(!analyticsTimeViewState || !start || !end) return;
+      const visible = getAnalyticsVisibleRows();
+      const startValue = Number(start.value);
+      const endValue = Number(end.value);
+      if(startLabel) startLabel.textContent = Number.isFinite(startValue) ? new Date(startValue).toLocaleString() : 'Unknown time';
+      if(endLabel) endLabel.textContent = Number.isFinite(endValue) ? new Date(endValue).toLocaleString() : 'Unknown time';
+      if(currentLabel) currentLabel.textContent = `${visible.rows.length}/${visible.total} records`;
+      if(scaleLabel){
+        const { minIndex, maxIndex } = getAnalyticsTimeSliderScaleIndexes();
+        scaleLabel.textContent = isAnalyticsTimeFullScale()
+          ? 'Slider scale: full range'
+          : `Slider scale: ${new Date(analyticsTimeValueAt(minIndex)).toLocaleString()} to ${new Date(analyticsTimeValueAt(maxIndex)).toLocaleString()}`;
+      }
+      if(reset) reset.disabled = isAnalyticsTimeFullScale() && isAnalyticsTimeSelectionFullScale();
+      updateAnalyticsTimeRangeVisual();
+    }
+
+    function zoomAnalyticsTimeSliderToSelection(){
+      if(!analyticsTimeViewState?.timeRows?.length) return false;
+      const visible = getAnalyticsVisibleRows();
+      if(visible.endIndex <= visible.startIndex) return false;
+      setAnalyticsTimeSliderScale(visible.startIndex, visible.endIndex);
+      return true;
+    }
+
+    function commitAnalyticsTimeSelection(){
+      if(!analyticsTimeViewState) return;
+      zoomAnalyticsTimeSliderToSelection();
+      resetOutlierX();
+      resetOutlierY();
+      generateAnalysis();
+    }
+
+    function resetAnalyticsTimeSliderScale(){
+      if(!analyticsTimeViewState?.timeRows?.length) return;
+      setAnalyticsTimeSliderScale(0, analyticsTimeViewState.timeRows.length - 1, true);
+      resetOutlierX();
+      resetOutlierY();
+      generateAnalysis();
+    }
+
+    function prepareAnalyticsTimeSlider(rows){
+      const controls = getAnalyticsTimeControls();
+      const timeRows = collectAnalyticsTimeRows(rows);
+      const dataKey = analyticsTimeDataKey(rows, timeRows);
+      const shouldReset = !analyticsTimeViewState || analyticsTimeViewState.dataKey !== dataKey;
+      analyticsTimeViewState = { rows, timeRows, dataKey };
+
+      if(!controls.wrapper || !controls.start || !controls.end) return;
+      if(timeRows.length < 2){
+        controls.wrapper.style.display = 'none';
+        updateAnalyticsTimeSliderLabels();
+        return;
+      }
+
+      controls.wrapper.style.display = 'block';
+      controls.start.disabled = controls.end.disabled = false;
+      if(shouldReset){
+        setAnalyticsTimeSliderScale(0, timeRows.length - 1, true);
+      } else {
+        updateAnalyticsTimeSliderLabels();
+        afterNextPaint(() => updateAnalyticsTimeMarkers());
+      }
     }
 
     function populateAnalyticsPortFilter(rows){
@@ -2625,9 +2946,7 @@
 
     function getMapFilters(){
       const p = document.getElementById('mapPortFilter').value.trim();
-      const start = parseLocalDateTimeInput(document.getElementById('mapStartTime'));
-      const end = parseLocalDateTimeInput(document.getElementById('mapEndTime'));
-      return { port: p || null, start, end };
+      return { port: p || null };
     }
 
     function filterRows(rows, filters){
@@ -2729,7 +3048,7 @@
       const minOutput = document.getElementById(`min${axis}Value`);
       const maxOutput = document.getElementById(`max${axis}Value`);
       if(!minEl || !maxEl) return;
-      if(label) label.textContent = field ? `Outlier filter (${axis}): ${formatFieldLabel(field)}` : `Outlier filter (${axis})`;
+      if(label) label.textContent = field ? `Value outlier filter (${axis}): ${formatFieldLabel(field)}` : `Value outlier filter (${axis})`;
 
       if(!field || !values.length){
         minEl.disabled = true;
@@ -2930,31 +3249,34 @@
 
     function buildStatsPanel(values, field){
       if(!values || !values.length){
-        return `<div class="stats-panel"><h3>Statistics for ${formatFieldLabel(field)}</h3><em>No data for statistics.</em></div>`;
+        return `<div class="stats-panel"><h3>${formatFieldLabel(field)}</h3><em>No data for statistics.</em></div>`;
       }
       const s = summarize(values);
       const prec = Object.prototype.hasOwnProperty.call(FIELD_PRECISION, field) ? FIELD_PRECISION[field] : null;
       const f = (x)=> (typeof x==='number') ? fmtNumber(x, prec) : (x==null?'':String(x));
+      const items = [
+        ['N', s.n],
+        ['Min', f(s.min)],
+        ['P5', f(s.p5)],
+        ['Median', f(s.median)],
+        ['Avg', f(s.mean)],
+        ['P95', f(s.p95)],
+        ['Max', f(s.max)],
+        ['Std', f(s.stdev)]
+      ];
       return `
         <div class="stats-panel">
-          <h3>Statistics for ${formatFieldLabel(field)}</h3>
-          <table>
-            <tr><td>N</td><td>${s.n}</td></tr>
-            <tr><td>Min</td><td>${f(s.min)}</td></tr>
-            <tr><td>P5</td><td>${f(s.p5)}</td></tr>
-            <tr><td>Median</td><td>${f(s.median)}</td></tr>
-            <tr><td>Average</td><td>${f(s.mean)}</td></tr>
-            <tr><td>P95</td><td>${f(s.p95)}</td></tr>
-            <tr><td>Max</td><td>${f(s.max)}</td></tr>
-            <tr><td>Std.dev.</td><td>${f(s.stdev)}</td></tr>
-          </table>
+          <h3>${formatFieldLabel(field)}</h3>
+          <div class="stats-mini-grid">
+            ${items.map(([label, value]) => `<div class="stats-mini-item"><div class="stats-mini-label">${label}</div><div class="stats-mini-value">${value}</div></div>`).join('')}
+          </div>
         </div>`;
     }
 
     function renderStatsBox(values, field, secondValues=null, secondField=''){
       const box = document.getElementById('statsBox');
       const hasSecond = !!secondField;
-      box.classList.toggle('stats-grid', hasSecond);
+      box.classList.add('stats-grid');
       box.innerHTML = buildStatsPanel(values, field) + (hasSecond ? buildStatsPanel(secondValues || [], secondField) : '');
     }
 
@@ -2967,7 +3289,6 @@
         data: rows, layout: 'fitColumns', height: '360px', columns: columns
       });
     }
-    function downloadAggregateCSV(){ if(!aggTableRef){ showError('No result table to download.'); return; } aggTableRef.download('csv', (logFileName || 'decoded') + '_analysis.csv'); }
 
     function generateAnalysis(){
       if(!analyticsCache) return;
@@ -2979,15 +3300,11 @@
       const bucket = document.getElementById('bucketSelect').value;
       const agg = document.getElementById('aggSelect').value;
       const chartType = document.getElementById('chartType').value;
-      const selectedPort = document.getElementById('portFilter').value;
-      const portRows = selectedPort ? rows.filter(row => String(row.port) === selectedPort) : rows;
-      if(!dateRangeWasEdited('startTime', 'endTime')){
-        setDateRangeFromRows(portRows, 'startTime', 'endTime', row => row.timestamp_utc);
-      }
       const filters = getFilters();
 
-      let fr0 = filterRows(rows, filters);
-      setDateRangeFromRows(fr0, 'startTime', 'endTime', row => row.timestamp_utc);
+      const portRows = filterRows(rows, filters);
+      prepareAnalyticsTimeSlider(portRows);
+      let fr0 = getAnalyticsVisibleRows().rows;
       const fieldXLabel = formatFieldLabel(fieldX);
       const field2Label = field2 ? formatFieldLabel(field2) : '';
       const fieldYLabel = fieldY ? formatFieldLabel(fieldY) : '';
@@ -4494,29 +4811,13 @@
         return;
       }
       const { rows, numericFields } = analyticsCache;
-
-      const selectedPort = document.getElementById('mapPortFilter').value;
-      const availableMapRows = rows.filter(row =>
-        String(row.source_port) === '29' &&
-        MAP_LOCATION_PORTS.has(String(row.port)) &&
-        (!selectedPort || String(row.port) === selectedPort)
-      );
-      if(!dateRangeWasEdited('mapStartTime', 'mapEndTime')){
-        setDateRangeFromRows(availableMapRows, 'mapStartTime', 'mapEndTime', row => row.timestamp_utc);
-      }
       const filters = getMapFilters();
       const fr = filterRows(rows, filters).filter(row =>
         String(row.source_port) === '29' && MAP_LOCATION_PORTS.has(String(row.port))
       );
 
-      const latSel = document.getElementById('latField');
-      const lonSel = document.getElementById('lonField');
-      const pickedLat = (latSel && latSel.value) ? latSel.value : (pickBestLat(numericFields) || 'latitude');
-      const pickedLon = (lonSel && lonSel.value) ? lonSel.value : (pickBestLon(numericFields) || 'longitude');
-
-      // Reflect auto-picked defaults in the dropdowns
-      if(latSel && (!latSel.value || latSel.value === '')) ensureOptionSelected(latSel, pickedLat);
-      if(lonSel && (!lonSel.value || lonSel.value === '')) ensureOptionSelected(lonSel, pickedLon);
+      const pickedLat = pickBestLat(numericFields) || 'latitude';
+      const pickedLon = pickBestLon(numericFields) || 'longitude';
 
       const ignoreZeros = document.getElementById('ignoreZeroCoords') && document.getElementById('ignoreZeroCoords').checked;
 
@@ -4546,7 +4847,6 @@
         if(b.timestampMs == null) return 1;
         return a.timestampMs - b.timestampMs;
       });
-      setDateRangeFromRows(points, 'mapStartTime', 'mapEndTime', point => point.timestampMs);
 
       const totalLocationMessages = fr.length;
       const sliderWrapper = document.getElementById('mapTimeSliderWrapper');
@@ -5197,8 +5497,6 @@
         const sliderWrapper = document.getElementById('accelerometerTimeSliderWrapper');
         if(!panel) return;
         const rows = collectAccelerometerRows(all);
-        const downloadBtn = document.getElementById('downloadAccelerometerBtn');
-        if(downloadBtn) downloadBtn.onclick = downloadAccelerometerCSV;
         panel.style.display = 'block';
         if(!rows.length){
           accelerometerViewState = null;
@@ -5221,28 +5519,6 @@
       }
     }
 
-    function buildAccelerometerCSV(rows){
-      const header = ['timestamp_utc','timestamp_local','source_port','x','y','z','magnitude','vedba','odba','jerk','pitch','roll'];
-      const lines = [header.join(',')];
-      (rows || []).forEach(row => {
-        lines.push(header.map(key => csvEscape(row[key] == null ? '' : row[key])).join(','));
-      });
-      return lines.join('\n');
-    }
-
-    function downloadAccelerometerCSV(){
-      const visible = getAccelerometerVisibleRows();
-      const rows = visible.rows && visible.rows.length ? visible.rows : collectAccelerometerRows();
-      if(!rows.length){ showError('No accelerometer data to download.'); return; }
-      const blob = new Blob([buildAccelerometerCSV(rows)], { type:'text/csv;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = (logFileName || 'decoded') + '_accelerometer_motion.csv';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
     function normalizeMacTail(mac){
       if(typeof mac !== 'string' || !mac.trim()) return '';
       const parts = mac.split(':').map(p => p.trim()).filter(Boolean);
@@ -5255,7 +5531,8 @@
       let tsSec = null;
       if(Number.isFinite(decoded.t)) tsSec = decoded.t;
       else if(Number.isFinite(fallbackTsSec)) tsSec = fallbackTsSec;
-      const tsIso = Number.isFinite(tsSec) ? new Date(tsSec * 1000).toISOString() : '';
+      const timestampMs = Number.isFinite(tsSec) ? tsSec * 1000 : null;
+      const tsIso = Number.isFinite(timestampMs) ? new Date(timestampMs).toISOString() : '';
 
       const rows = [];
       Object.keys(decoded)
@@ -5269,7 +5546,8 @@
           if(!Number.isFinite(rssi) || !device) return;
           rows.push({
             timestamp_utc: tsIso,
-            timestamp_local: tsIso ? new Date(tsIso).toLocaleString() : '',
+            timestamp_local: Number.isFinite(timestampMs) ? new Date(timestampMs).toLocaleString() : '',
+            timestampMs,
             device,
             rssi
           });
@@ -5322,19 +5600,228 @@
       });
     }
 
-    function getBleFilters(){
-      const start = parseLocalDateTimeInput(document.getElementById('bleStartTime'));
-      const end = parseLocalDateTimeInput(document.getElementById('bleEndTime'));
-      return { start, end };
+    function constrainBleTimeRange(changedHandle){
+      const startSlider = document.getElementById('bleTimeStartSlider');
+      const endSlider = document.getElementById('bleTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+      if(Number(startSlider.value) > Number(endSlider.value)){
+        if(changedHandle === 'start') endSlider.value = startSlider.value;
+        else startSlider.value = endSlider.value;
+      }
     }
 
-    function filterBleRows(rows, filters){
-      return (rows || []).filter((r) => {
-        const t = r.timestamp_utc ? new Date(r.timestamp_utc) : null;
-        if(filters.start && (!t || t < filters.start)) return false;
-        if(filters.end && (!t || t > filters.end)) return false;
-        return true;
-      });
+    function bleSliderUsesTimestamps(){
+      const rows = bleScanViewState?.rows || [];
+      if(rows.length < 2) return false;
+      return rows.every(row => Number.isFinite(row.timestampMs)) && rows[rows.length - 1].timestampMs > rows[0].timestampMs;
+    }
+
+    function bleSliderValueForRow(index){
+      const row = bleScanViewState?.rows?.[index];
+      return bleSliderUsesTimestamps() && row ? row.timestampMs : index;
+    }
+
+    function getBleSliderScaleIndexes(){
+      const startSlider = document.getElementById('bleTimeStartSlider');
+      const endSlider = document.getElementById('bleTimeEndSlider');
+      if(!startSlider || !endSlider) return { minIndex: 0, maxIndex: 0 };
+      return {
+        minIndex: Number(startSlider.dataset.scaleMinIndex) || 0,
+        maxIndex: Number(endSlider.dataset.scaleMaxIndex) || 0
+      };
+    }
+
+    function setBleSliderScale(minIndex, maxIndex, resetSelection=false){
+      if(!bleScanViewState) return;
+      const startSlider = document.getElementById('bleTimeStartSlider');
+      const endSlider = document.getElementById('bleTimeEndSlider');
+      if(!startSlider || !endSlider) return;
+
+      const maxRowIndex = Math.max(0, bleScanViewState.rows.length - 1);
+      const min = Math.max(0, Math.min(maxRowIndex, Math.floor(minIndex)));
+      const max = Math.max(min, Math.min(maxRowIndex, Math.ceil(maxIndex)));
+      const minValue = bleSliderValueForRow(min);
+      const maxValue = bleSliderValueForRow(max);
+      const currentStart = resetSelection ? minValue : Math.max(minValue, Math.min(maxValue, Number(startSlider.value) || minValue));
+      const currentEnd = resetSelection ? maxValue : Math.max(currentStart, Math.min(maxValue, Number(endSlider.value) || maxValue));
+
+      startSlider.min = endSlider.min = String(minValue);
+      startSlider.max = endSlider.max = String(maxValue);
+      startSlider.value = String(currentStart);
+      endSlider.value = String(currentEnd);
+      startSlider.dataset.scaleMinIndex = endSlider.dataset.scaleMinIndex = String(min);
+      startSlider.dataset.scaleMaxIndex = endSlider.dataset.scaleMaxIndex = String(max);
+      startSlider.dataset.rowCount = endSlider.dataset.rowCount = String(bleScanViewState.rows.length);
+      updateBleSliderLabels();
+      afterNextPaint(() => updateBleTimeMarkers());
+    }
+
+    function resetBleSliderScale(){
+      if(!bleScanViewState) return;
+      setBleSliderScale(0, bleScanViewState.rows.length - 1);
+      renderBleScanView();
+    }
+
+    function zoomBleSliderToSelection(){
+      if(!bleScanViewState) return false;
+      const visible = getBleVisibleRows();
+      if(visible.endIndex <= visible.startIndex) return false;
+      setBleSliderScale(visible.startIndex, visible.endIndex);
+      return true;
+    }
+
+    function commitBleTimeSelection(){
+      if(!bleScanViewState) return;
+      zoomBleSliderToSelection();
+      renderBleScanView();
+    }
+
+    function updateBleSliderScaleControls(){
+      const label = document.getElementById('bleTimeScaleLabel');
+      const resetBtn = document.getElementById('bleTimeResetScaleBtn');
+      const startSlider = document.getElementById('bleTimeStartSlider');
+      const endSlider = document.getElementById('bleTimeEndSlider');
+      if(!bleScanViewState || !startSlider || !endSlider){
+        if(label) label.textContent = '';
+        if(resetBtn) resetBtn.disabled = true;
+        return;
+      }
+
+      const rows = bleScanViewState.rows || [];
+      const { minIndex, maxIndex } = getBleSliderScaleIndexes();
+      const fullMax = Math.max(0, rows.length - 1);
+      const isFullScale = minIndex <= 0 && maxIndex >= fullMax;
+      const scaleStart = rows[minIndex];
+      const scaleEnd = rows[maxIndex];
+
+      if(label){
+        label.textContent = isFullScale
+          ? 'Slider scale: full range'
+          : `Slider scale: ${scaleStart?.timestamp_local || 'Unknown time'} to ${scaleEnd?.timestamp_local || 'Unknown time'}`;
+      }
+      if(resetBtn) resetBtn.disabled = isFullScale;
+    }
+
+    function rowPositionOnBleTimeScale(row, index, minIndex, maxIndex){
+      const rows = bleScanViewState?.rows || [];
+      const scaleStartMs = rows[minIndex]?.timestampMs;
+      const scaleEndMs = rows[maxIndex]?.timestampMs;
+      if(Number.isFinite(row?.timestampMs) && Number.isFinite(scaleStartMs) && Number.isFinite(scaleEndMs) && scaleEndMs > scaleStartMs){
+        return (row.timestampMs - scaleStartMs) / (scaleEndMs - scaleStartMs);
+      }
+      const span = maxIndex - minIndex;
+      return span > 0 ? (index - minIndex) / span : 0.5;
+    }
+
+    function drawBleTimeMarkerCanvas(canvas, minIndex, maxIndex, startIndex, endIndex){
+      if(!canvas || !bleScanViewState) return;
+      const rect = canvas.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width));
+      const height = Math.max(1, Math.round(rect.height || 28));
+      const dpr = window.devicePixelRatio || 1;
+      const targetWidth = Math.round(width * dpr);
+      const targetHeight = Math.round(height * dpr);
+      if(canvas.width !== targetWidth) canvas.width = targetWidth;
+      if(canvas.height !== targetHeight) canvas.height = targetHeight;
+
+      const ctx = canvas.getContext('2d');
+      if(!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+
+      const rows = bleScanViewState.rows || [];
+      if(!rows.length || maxIndex < minIndex) return;
+
+      const first = Math.max(0, Math.min(rows.length - 1, minIndex));
+      const last = Math.max(first, Math.min(rows.length - 1, maxIndex));
+      const y = height - 4;
+      const radius = 1.8;
+
+      for(let i = first; i <= last; i++){
+        const row = rows[i];
+        const ratio = Math.max(0, Math.min(1, rowPositionOnBleTimeScale(row, i, first, last)));
+        const x = ratio * width;
+        const selected = i >= startIndex && i <= endIndex;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = selected ? 'rgba(249,115,22,.78)' : 'rgba(22,163,74,.28)';
+        ctx.fill();
+      }
+    }
+
+    function updateBleTimeMarkers(){
+      if(!bleScanViewState) return;
+      const { minIndex, maxIndex } = getBleSliderScaleIndexes();
+      const visible = getBleVisibleRows();
+      const startIndex = visible.rows.length ? visible.startIndex : 1;
+      const endIndex = visible.rows.length ? visible.endIndex : 0;
+      drawBleTimeMarkerCanvas(document.getElementById('bleTimeMarkers'), minIndex, maxIndex, startIndex, endIndex);
+    }
+
+    function updateBleTimeRangeVisual(){
+      const startSlider = document.getElementById('bleTimeStartSlider');
+      const endSlider = document.getElementById('bleTimeEndSlider');
+      const rangeSlider = document.getElementById('bleTimeRangeSlider');
+      if(!startSlider || !endSlider || !rangeSlider) return;
+      const min = Number(startSlider.min);
+      const max = Number(endSlider.max);
+      const span = max - min;
+      const startPercent = span > 0 ? ((Number(startSlider.value) - min) / span) * 100 : 0;
+      const endPercent = span > 0 ? ((Number(endSlider.value) - min) / span) * 100 : 100;
+      rangeSlider.style.setProperty('--range-start', `${startPercent}%`);
+      rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
+      updateBleTimeMarkers();
+    }
+
+    function getBleVisibleRows(){
+      if(!bleScanViewState) return { rows: [], startIndex: 0, endIndex: 0, total: 0 };
+      const rows = bleScanViewState.rows || [];
+      const maxIndex = Math.max(0, rows.length - 1);
+      const startSlider = document.getElementById('bleTimeStartSlider');
+      const endSlider = document.getElementById('bleTimeEndSlider');
+      const startValue = startSlider ? Number(startSlider.value) : bleSliderValueForRow(0);
+      const endValue = endSlider ? Number(endSlider.value) : bleSliderValueForRow(maxIndex);
+      let startIndex = 0;
+      let endIndex = maxIndex;
+      let visibleRows;
+
+      if(bleSliderUsesTimestamps()){
+        let firstSelectedIndex = -1;
+        visibleRows = rows.filter((row, index) => {
+          const selected = row.timestampMs >= startValue && row.timestampMs <= endValue;
+          if(selected){
+            if(firstSelectedIndex < 0){
+              firstSelectedIndex = index;
+              startIndex = index;
+            }
+            endIndex = index;
+          }
+          return selected;
+        });
+        if(!visibleRows.length){
+          startIndex = rows.findIndex(row => row.timestampMs >= startValue);
+          if(startIndex < 0) startIndex = maxIndex;
+          endIndex = startIndex;
+        }
+      } else {
+        startIndex = Math.max(0, Math.min(maxIndex, Math.floor(startValue)));
+        endIndex = Math.max(startIndex, Math.min(maxIndex, Math.ceil(endValue)));
+        visibleRows = rows.slice(startIndex, endIndex + 1);
+      }
+      return { rows: visibleRows, startIndex, endIndex, total: rows.length };
+    }
+
+    function updateBleSliderLabels(){
+      const visible = getBleVisibleRows();
+      const rows = visible.rows;
+      const startLabel = document.getElementById('bleTimeStartLabel');
+      const endLabel = document.getElementById('bleTimeEndLabel');
+      const currentLabel = document.getElementById('bleTimeCurrentLabel');
+      if(startLabel) startLabel.textContent = rows[0]?.timestamp_local || 'Unknown time';
+      if(endLabel) endLabel.textContent = rows[rows.length - 1]?.timestamp_local || 'Unknown time';
+      if(currentLabel) currentLabel.textContent = `${rows.length}/${visible.total} detections`;
+      updateBleTimeRangeVisual();
+      updateBleSliderScaleControls();
     }
 
     function renderBleScanChart(rows){
@@ -5396,60 +5883,82 @@
       });
     }
 
-    function renderBleScanPanel(all, resetDateRange=false){
+    function renderBleScanRows(rows){
+      const summary = document.getElementById('bleScanSummary');
+      const tableHolder = document.getElementById('bleScanTable');
+      if(!summary || !tableHolder) return;
+
+      if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
+      tableHolder.innerHTML = '';
+
+      if(!rows.length){
+        if(bleScanChartRef){ bleScanChartRef.destroy(); bleScanChartRef = null; }
+        summary.innerHTML = '<em>No BLE scan detections found for the selected time range.</em>';
+        return;
+      }
+
+      const unique = new Set(rows.map(r => r.device));
+      const maxRssi = Math.max(...rows.map(r => r.rssi));
+      const minRssi = Math.min(...rows.map(r => r.rssi));
+      summary.innerHTML = `
+        <h3 style="margin:0 0 6px;">BLE detection summary</h3>
+        <table>
+          <tr><td>Total detections</td><td>${rows.length}</td></tr>
+          <tr><td>Unique devices</td><td>${unique.size}</td></tr>
+          <tr><td>Strongest RSSI</td><td>${maxRssi} dBm</td></tr>
+          <tr><td>Weakest RSSI</td><td>${minRssi} dBm</td></tr>
+        </table>`;
+
+      renderBleScanChart(rows);
+
+      bleScanTableRef = new Tabulator('#bleScanTable', {
+        data: rows,
+        layout: 'fitColumns',
+        height: '320px',
+        columns: [
+          { title: 'Timestamp (UTC)', field: 'timestamp_utc', visible: false },
+          { title: 'Timestamp (local)', field: 'timestamp_local' },
+          { title: 'MAC tail (last 3 bytes)', field: 'device' },
+          { title: 'RSSI (dBm)', field: 'rssi', sorter: 'number' }
+        ],
+        initialSort: [
+          { column: 'timestamp_utc', dir: 'asc' },
+          { column: 'device', dir: 'asc' }
+        ]
+      });
+    }
+
+    function renderBleScanView(){
+      if(!bleScanViewState) return;
+      const visible = getBleVisibleRows();
+      updateBleSliderLabels();
+      renderBleScanRows(visible.rows);
+    }
+
+    function renderBleScanPanel(all, resetRange=false){
       try{
         const panel = document.getElementById('bleScanPanel');
-        const summary = document.getElementById('bleScanSummary');
-        const tableHolder = document.getElementById('bleScanTable');
-        if(!panel || !summary || !tableHolder) return;
-
-        if(bleScanTableRef){ try { bleScanTableRef.destroy(); } catch(e){} bleScanTableRef = null; }
-        tableHolder.innerHTML = '';
+        const sliderWrapper = document.getElementById('bleTimeSliderWrapper');
+        if(!panel) return;
 
         const allRows = collectBleScanRowsFromPort29(all);
-        if(resetDateRange || !dateRangeWasEdited('bleStartTime', 'bleEndTime')){
-          setDateRangeFromRows(allRows, 'bleStartTime', 'bleEndTime', row => row.timestamp_utc, resetDateRange);
-        }
-        const rows = filterBleRows(allRows, getBleFilters());
-        setDateRangeFromRows(rows, 'bleStartTime', 'bleEndTime', row => row.timestamp_utc);
-        if(!rows.length){
-          if(bleScanChartRef){ bleScanChartRef.destroy(); bleScanChartRef = null; }
-          summary.innerHTML = '<em>No BLE scan detections found for the selected time range.</em>';
-          panel.style.display = 'block';
+        bleScanViewState = { rows: allRows };
+        panel.style.display = 'block';
+        if(!allRows.length){
+          if(sliderWrapper) sliderWrapper.style.display = 'none';
+          renderBleScanRows([]);
           return;
         }
 
-        const unique = new Set(rows.map(r => r.device));
-        const maxRssi = Math.max(...rows.map(r => r.rssi));
-        const minRssi = Math.min(...rows.map(r => r.rssi));
-        summary.innerHTML = `
-          <h3 style="margin:0 0 6px;">BLE detection summary</h3>
-          <table>
-            <tr><td>Total detections</td><td>${rows.length}</td></tr>
-            <tr><td>Unique devices</td><td>${unique.size}</td></tr>
-            <tr><td>Strongest RSSI</td><td>${maxRssi} dBm</td></tr>
-            <tr><td>Weakest RSSI</td><td>${minRssi} dBm</td></tr>
-          </table>`;
-
-        renderBleScanChart(rows);
-
-        bleScanTableRef = new Tabulator('#bleScanTable', {
-          data: rows,
-          layout: 'fitColumns',
-          height: '320px',
-          columns: [
-            { title: 'Timestamp (UTC)', field: 'timestamp_utc', visible: false },
-            { title: 'Timestamp (local)', field: 'timestamp_local' },
-            { title: 'MAC tail (last 3 bytes)', field: 'device' },
-            { title: 'RSSI (dBm)', field: 'rssi', sorter: 'number' }
-          ],
-          initialSort: [
-            { column: 'timestamp_utc', dir: 'asc' },
-            { column: 'device', dir: 'asc' }
-          ]
-        });
-
-        panel.style.display = 'block';
+        const startSlider = document.getElementById('bleTimeStartSlider');
+        const endSlider = document.getElementById('bleTimeEndSlider');
+        if(sliderWrapper) sliderWrapper.style.display = 'block';
+        if(startSlider && endSlider){
+          const rowCountChanged = Number(startSlider.dataset.rowCount) !== allRows.length;
+          setBleSliderScale(0, allRows.length - 1, resetRange || rowCountChanged);
+          startSlider.disabled = endSlider.disabled = allRows.length <= 1;
+        }
+        renderBleScanView();
       }catch(err){
         console.error('renderBleScanPanel failed', err);
       }
@@ -5943,8 +6452,6 @@
         tableHolder.innerHTML = '';
 
         const rows = collectCmdqRows(all);
-        const genBtn = document.getElementById('genCmdqBtn');
-        if(genBtn) genBtn.onclick = () => renderCmdqIfNeeded(true);
 
         if(!rows.length){
           cmdqViewState = null;
