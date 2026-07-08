@@ -153,6 +153,11 @@
       gap:8px;
       align-items:center;
     }
+    .time-slider-actions{
+      display:flex;
+      gap:6px;
+      align-items:center;
+    }
     .time-scale-row{
       display:flex;
       align-items:center;
@@ -161,7 +166,8 @@
       margin-top:8px;
       flex-wrap:wrap;
     }
-    .time-scale-reset{
+    .time-scale-reset,
+    .time-selection-reset{
       appearance:none;
       border:1px solid rgba(17,24,39,.16);
       border-radius:6px;
@@ -175,12 +181,21 @@
       place-items:center;
       cursor:pointer;
     }
-    .time-scale-reset::after{
+    .time-scale-reset::after,
+    .time-selection-reset::after{
       content:attr(data-short-label);
       display:none;
     }
-    .time-scale-reset svg{ width:16px; height:16px; stroke:currentColor; }
-    .time-scale-reset:disabled{
+    .time-scale-reset svg,
+    .time-selection-reset svg{ width:16px; height:16px; stroke:currentColor; }
+    .time-selection-reset .range-reset-icon{
+      font-size:14px;
+      line-height:1;
+      font-weight:900;
+      letter-spacing:-.08em;
+    }
+    .time-scale-reset:disabled,
+    .time-selection-reset:disabled{
       opacity:.35;
       cursor:not-allowed;
     }
@@ -216,16 +231,20 @@
       .time-slider-row{
         grid-template-columns:minmax(0, 1fr);
       }
-      .time-scale-reset{
+      .time-slider-actions{
+        justify-self:start;
+      }
+      .time-scale-reset,
+      .time-selection-reset{
         width:auto;
         min-height:34px;
         padding:0 10px;
         display:inline-flex;
         justify-content:center;
         gap:6px;
-        justify-self:start;
       }
-      .time-scale-reset::after{
+      .time-scale-reset::after,
+      .time-selection-reset::after{
         display:inline;
         font-size:12px;
         font-weight:700;
@@ -458,6 +477,7 @@
     }
     #mapWrapper.map-screenshot-capture .map-fullscreen-time-control input[type="range"],
     #mapWrapper.map-screenshot-capture .time-scale-reset,
+    #mapWrapper.map-screenshot-capture .time-selection-reset,
     #mapWrapper.map-screenshot-capture .map-tools-control,
     #mapWrapper.map-screenshot-capture .leaflet-control-zoom{
       display:none !important;
@@ -1231,12 +1251,17 @@
                 <input id="analyticsTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Analytics start time" />
                 <input id="analyticsTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Analytics end time" />
               </div>
-              <button type="button" id="analyticsTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
+              <div class="time-slider-actions">
+                <button type="button" id="analyticsTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <button type="button" id="analyticsTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
+                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                </button>
+              </div>
             </div>
             <div id="analyticsTimeSliderLabels" class="dim">
               <span id="analyticsTimeStartLabel" class="time-slider-bound from"></span>
@@ -1303,12 +1328,17 @@
                   <input id="mapFullscreenTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map start time" />
                   <input id="mapFullscreenTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map end time" />
                 </div>
-                <button type="button" id="mapFullscreenTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
-                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  </svg>
-                </button>
+                <div class="time-slider-actions">
+                  <button type="button" id="mapFullscreenTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                  </button>
+                  <button type="button" id="mapFullscreenTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
+                    <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                  </button>
+                </div>
               </div>
               <div class="map-fullscreen-time-labels">
                 <span id="mapFullscreenTimeStartLabel"></span>
@@ -1326,12 +1356,17 @@
                 <input id="mapTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map start time" />
                 <input id="mapTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map end time" />
               </div>
-              <button type="button" id="mapTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
+              <div class="time-slider-actions">
+                <button type="button" id="mapTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <button type="button" id="mapTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
+                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                </button>
+              </div>
             </div>
             <div id="mapTimeSliderLabels" class="dim">
               <span id="mapTimeStartLabel" class="time-slider-bound from"></span>
@@ -1367,12 +1402,17 @@
                 <input id="accelerometerTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer start time" />
                 <input id="accelerometerTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer end time" />
               </div>
-              <button type="button" id="accelerometerTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
+              <div class="time-slider-actions">
+                <button type="button" id="accelerometerTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <button type="button" id="accelerometerTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
+                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                </button>
+              </div>
             </div>
             <div id="accelerometerTimeSliderLabels" class="dim">
               <span id="accelerometerTimeStartLabel" class="time-slider-bound from"></span>
@@ -1404,12 +1444,17 @@
                 <input id="bleTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="BLE scan start time" />
                 <input id="bleTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="BLE scan end time" />
               </div>
-              <button type="button" id="bleTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
+              <div class="time-slider-actions">
+                <button type="button" id="bleTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <button type="button" id="bleTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
+                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                </button>
+              </div>
             </div>
             <div id="bleTimeSliderLabels" class="dim">
               <span id="bleTimeStartLabel" class="time-slider-bound from"></span>
@@ -1443,12 +1488,17 @@
                 <input id="cmdqTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ start time" />
                 <input id="cmdqTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ end time" />
               </div>
-              <button type="button" id="cmdqTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
-                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
+              <div class="time-slider-actions">
+                <button type="button" id="cmdqTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale">
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <button type="button" id="cmdqTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
+                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                </button>
+              </div>
             </div>
             <div id="cmdqTimeSliderLabels" class="dim">
               <span id="cmdqTimeStartLabel" class="time-slider-bound from"></span>
@@ -1485,12 +1535,17 @@
               <input id="logTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Log message start time" />
               <input id="logTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Log message end time" />
             </div>
-            <button type="button" id="logTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-                <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            </button>
+            <div class="time-slider-actions">
+              <button type="button" id="logTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
+              <button type="button" id="logTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
+                <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+              </button>
+            </div>
           </div>
           <div id="logTimeSliderLabels" class="dim">
             <span id="logTimeStartLabel" class="time-slider-bound from"></span>
@@ -1913,8 +1968,23 @@
     function setTimeSliderResetState(resetBtn, enabled){
       if(!resetBtn) return;
       resetBtn.disabled = !enabled;
-      resetBtn.title = "Full range";
-      resetBtn.setAttribute("aria-label", "Full range");
+      resetBtn.title = "Reset time scale";
+      resetBtn.setAttribute("aria-label", "Reset time scale");
+      resetBtn.dataset.shortLabel = "Scale";
+    }
+
+    function setTimeSelectionResetState(resetBtn, startSlider, endSlider, fullMin=null, fullMax=null){
+      if(!resetBtn || !startSlider || !endSlider){
+        if(resetBtn) resetBtn.disabled = true;
+        return;
+      }
+      const min = fullMin == null ? Number(startSlider.min) : Number(fullMin);
+      const max = fullMax == null ? Number(endSlider.max) : Number(fullMax);
+      const fullSelection = Number(startSlider.value) <= min && Number(endSlider.value) >= max;
+      resetBtn.disabled = fullSelection;
+      resetBtn.title = "Reset selected range";
+      resetBtn.setAttribute("aria-label", "Reset selected range");
+      resetBtn.dataset.shortLabel = "Range";
     }
 
     function formatTimeSliderScaleLabel(isFullScale, startText, endText){
@@ -2083,6 +2153,7 @@
           end: document.getElementById("logTimeEndSlider"),
           markers: document.getElementById("logTimeMarkers"),
           reset: document.getElementById("logTimeResetScaleBtn"),
+          resetSelection: document.getElementById("logTimeResetSelectionBtn"),
           startLabel: document.getElementById("logTimeStartLabel"),
           endLabel: document.getElementById("logTimeEndLabel"),
           currentLabel: document.getElementById("logTimeCurrentLabel"),
@@ -2203,7 +2274,7 @@
       }
 
       function updateLogTimeSliderLabels(){
-        const { start, end, startLabel, endLabel, currentLabel, scaleLabel, reset } = getLogTimeControls();
+        const { start, end, startLabel, endLabel, currentLabel, scaleLabel, reset, resetSelection } = getLogTimeControls();
         if(!start || !end) return;
         const startValue = Number(start.value);
         const endValue = Number(end.value);
@@ -2220,7 +2291,14 @@
           );
         }
         setTimeSliderResetState(reset, !(isLogTimeFullRange() && isLogTimeSelectionFullScale()));
+        setTimeSelectionResetState(resetSelection, start, end, logTimeValueAt(0), logTimeValueAt(logTimeRows.length - 1));
         updateLogTimeRangeVisual();
+      }
+
+      function resetLogTimeSelection(){
+        if(!logTimeRows.length) return;
+        setLogTimeSliderScale(0, logTimeRows.length - 1, true);
+        applyLogTimeFilter();
       }
 
       function zoomLogTimeSliderToSelection(){
@@ -2239,7 +2317,7 @@
       }
 
       function initializeLogTimeSlider(){
-        const { wrapper, start, end, reset } = getLogTimeControls();
+      const { wrapper, start, end, reset, resetSelection } = getLogTimeControls();
         if(!wrapper || !start || !end) return;
         if(logTimeRows.length < 2){
           wrapper.style.display = "none";
@@ -2266,10 +2344,11 @@
         };
         if(reset){
           reset.onclick = () => {
-            setLogTimeSliderScale(0, logTimeRows.length - 1, true);
+            setLogTimeSliderScale(0, logTimeRows.length - 1, false);
             applyLogTimeFilter();
           };
         }
+        if(resetSelection) resetSelection.onclick = resetLogTimeSelection;
         afterNextPaint(() => updateLogTimeSliderLabels());
       }
 
@@ -2791,6 +2870,8 @@
       });
       const accelerometerTimeResetScaleBtn = document.getElementById('accelerometerTimeResetScaleBtn');
       if(accelerometerTimeResetScaleBtn) accelerometerTimeResetScaleBtn.onclick = () => resetAccelerometerSliderScale();
+      const accelerometerTimeResetSelectionBtn = document.getElementById('accelerometerTimeResetSelectionBtn');
+      if(accelerometerTimeResetSelectionBtn) accelerometerTimeResetSelectionBtn.onclick = () => resetAccelerometerTimeSelection();
       ['bleTimeStartSlider','bleTimeEndSlider'].forEach(id => {
         const slider = document.getElementById(id);
         if(!slider) return;
@@ -2802,6 +2883,8 @@
       });
       const bleTimeResetScaleBtn = document.getElementById('bleTimeResetScaleBtn');
       if(bleTimeResetScaleBtn) bleTimeResetScaleBtn.onclick = () => resetBleSliderScale();
+      const bleTimeResetSelectionBtn = document.getElementById('bleTimeResetSelectionBtn');
+      if(bleTimeResetSelectionBtn) bleTimeResetSelectionBtn.onclick = () => resetBleTimeSelection();
     });
 
     // =========================
@@ -2964,6 +3047,8 @@
       });
       const analyticsTimeResetScaleBtn = document.getElementById('analyticsTimeResetScaleBtn');
       if(analyticsTimeResetScaleBtn) analyticsTimeResetScaleBtn.onclick = () => resetAnalyticsTimeSliderScale();
+      const analyticsTimeResetSelectionBtn = document.getElementById('analyticsTimeResetSelectionBtn');
+      if(analyticsTimeResetSelectionBtn) analyticsTimeResetSelectionBtn.onclick = () => resetAnalyticsTimeSelection();
       const ct = document.getElementById('chartType');
       if(ct){ ct.onchange = () => { updateChartUI(); resetOutlierY(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
       updateChartUI();
@@ -2995,6 +3080,10 @@
       if(mapTimeResetScaleBtn) mapTimeResetScaleBtn.onclick = () => resetMapSliderScale();
       const mapFullscreenTimeResetScaleBtn = document.getElementById('mapFullscreenTimeResetScaleBtn');
       if(mapFullscreenTimeResetScaleBtn) mapFullscreenTimeResetScaleBtn.onclick = () => resetMapSliderScale();
+      const mapTimeResetSelectionBtn = document.getElementById('mapTimeResetSelectionBtn');
+      if(mapTimeResetSelectionBtn) mapTimeResetSelectionBtn.onclick = () => resetMapTimeSelection();
+      const mapFullscreenTimeResetSelectionBtn = document.getElementById('mapFullscreenTimeResetSelectionBtn');
+      if(mapFullscreenTimeResetSelectionBtn) mapFullscreenTimeResetSelectionBtn.onclick = () => resetMapTimeSelection();
 
       // Recalculate ranges when fields or row-level filters change.
       if(selX){ selX.onchange = () => { resetOutlierX(); toggleOutlierUI(); scheduleGenerateAnalysis(); }; }
@@ -3046,6 +3135,7 @@
         start: document.getElementById('analyticsTimeStartSlider'),
         end: document.getElementById('analyticsTimeEndSlider'),
         reset: document.getElementById('analyticsTimeResetScaleBtn'),
+        resetSelection: document.getElementById('analyticsTimeResetSelectionBtn'),
         startLabel: document.getElementById('analyticsTimeStartLabel'),
         endLabel: document.getElementById('analyticsTimeEndLabel'),
         currentLabel: document.getElementById('analyticsTimeCurrentLabel'),
@@ -3222,7 +3312,7 @@
     }
 
     function updateAnalyticsTimeSliderLabels(){
-      const { start, end, startLabel, endLabel, currentLabel, scaleLabel, reset } = getAnalyticsTimeControls();
+      const { start, end, startLabel, endLabel, currentLabel, scaleLabel, reset, resetSelection } = getAnalyticsTimeControls();
       if(!analyticsTimeViewState || !start || !end) return;
       const visible = getAnalyticsVisibleRows();
       const startValue = Number(start.value);
@@ -3241,6 +3331,13 @@
         );
       }
       setTimeSliderResetState(reset, !(isAnalyticsTimeFullScale() && isAnalyticsTimeSelectionFullScale()));
+      setTimeSelectionResetState(
+        resetSelection,
+        start,
+        end,
+        analyticsTimeValueAt(0),
+        analyticsTimeValueAt((analyticsTimeViewState.timeRows || []).length - 1)
+      );
       updateAnalyticsTimeRangeVisual();
     }
 
@@ -3261,6 +3358,14 @@
     }
 
     function resetAnalyticsTimeSliderScale(){
+      if(!analyticsTimeViewState?.timeRows?.length) return;
+      setAnalyticsTimeSliderScale(0, analyticsTimeViewState.timeRows.length - 1, false);
+      resetOutlierX();
+      resetOutlierY();
+      generateAnalysis();
+    }
+
+    function resetAnalyticsTimeSelection(){
       if(!analyticsTimeViewState?.timeRows?.length) return;
       setAnalyticsTimeSliderScale(0, analyticsTimeViewState.timeRows.length - 1, true);
       resetOutlierX();
@@ -5225,6 +5330,12 @@
       renderMapView(false);
     }
 
+    function resetMapTimeSelection(){
+      if(!mapViewState?.points?.length) return;
+      setMapSliderScale(0, mapViewState.points.length - 1, true);
+      renderMapView(false);
+    }
+
     function zoomMapSliderToSelection(){
       if(!mapViewState) return;
       const visible = getMapVisiblePoints();
@@ -5245,11 +5356,16 @@
         document.getElementById('mapTimeResetScaleBtn'),
         document.getElementById('mapFullscreenTimeResetScaleBtn')
       ].filter(Boolean);
+      const resetSelectionBtns = [
+        document.getElementById('mapTimeResetSelectionBtn'),
+        document.getElementById('mapFullscreenTimeResetSelectionBtn')
+      ].filter(Boolean);
       const startSlider = document.getElementById('mapTimeStartSlider');
       const endSlider = document.getElementById('mapTimeEndSlider');
       if(!mapViewState || !startSlider || !endSlider){
         if(label) label.textContent = '';
         resetBtns.forEach(btn => setTimeSliderResetState(btn, false));
+        resetSelectionBtns.forEach(btn => setTimeSelectionResetState(btn, null, null));
         return;
       }
 
@@ -5268,6 +5384,13 @@
         );
       }
       resetBtns.forEach(btn => setTimeSliderResetState(btn, !isFullScale));
+      resetSelectionBtns.forEach(btn => setTimeSelectionResetState(
+        btn,
+        startSlider,
+        endSlider,
+        mapSliderValueForPoint(0),
+        mapSliderValueForPoint(Math.max(0, (mapViewState.points || []).length - 1))
+      ));
     }
 
     function syncMapFullscreenSlidersFromMain(){
@@ -5994,6 +6117,12 @@
       renderAccelerometerView();
     }
 
+    function resetAccelerometerTimeSelection(){
+      if(!accelerometerViewState?.rows?.length) return;
+      setAccelerometerSliderScale(0, accelerometerViewState.rows.length - 1, true);
+      renderAccelerometerView();
+    }
+
     function zoomAccelerometerSliderToSelection(){
       if(!accelerometerViewState) return false;
       const visible = getAccelerometerVisibleRows();
@@ -6011,11 +6140,13 @@
     function updateAccelerometerSliderScaleControls(){
       const label = document.getElementById('accelerometerTimeScaleLabel');
       const resetBtn = document.getElementById('accelerometerTimeResetScaleBtn');
+      const resetSelectionBtn = document.getElementById('accelerometerTimeResetSelectionBtn');
       const startSlider = document.getElementById('accelerometerTimeStartSlider');
       const endSlider = document.getElementById('accelerometerTimeEndSlider');
       if(!accelerometerViewState || !startSlider || !endSlider){
         if(label) label.textContent = '';
         setTimeSliderResetState(resetBtn, false);
+        setTimeSelectionResetState(resetSelectionBtn, null, null);
         return;
       }
 
@@ -6034,6 +6165,13 @@
         );
       }
       setTimeSliderResetState(resetBtn, !isFullScale);
+      setTimeSelectionResetState(
+        resetSelectionBtn,
+        startSlider,
+        endSlider,
+        accelerometerSliderValueForRow(0),
+        accelerometerSliderValueForRow(Math.max(0, (accelerometerViewState.rows || []).length - 1))
+      );
     }
 
     function rowPositionOnAccelerometerTimeScale(row, index, minIndex, maxIndex){
@@ -6346,6 +6484,12 @@
       renderBleScanView();
     }
 
+    function resetBleTimeSelection(){
+      if(!bleScanViewState?.rows?.length) return;
+      setBleSliderScale(0, bleScanViewState.rows.length - 1, true);
+      renderBleScanView();
+    }
+
     function zoomBleSliderToSelection(){
       if(!bleScanViewState) return false;
       const visible = getBleVisibleRows();
@@ -6363,11 +6507,13 @@
     function updateBleSliderScaleControls(){
       const label = document.getElementById('bleTimeScaleLabel');
       const resetBtn = document.getElementById('bleTimeResetScaleBtn');
+      const resetSelectionBtn = document.getElementById('bleTimeResetSelectionBtn');
       const startSlider = document.getElementById('bleTimeStartSlider');
       const endSlider = document.getElementById('bleTimeEndSlider');
       if(!bleScanViewState || !startSlider || !endSlider){
         if(label) label.textContent = '';
         setTimeSliderResetState(resetBtn, false);
+        setTimeSelectionResetState(resetSelectionBtn, null, null);
         return;
       }
 
@@ -6386,6 +6532,13 @@
         );
       }
       setTimeSliderResetState(resetBtn, !isFullScale);
+      setTimeSelectionResetState(
+        resetSelectionBtn,
+        startSlider,
+        endSlider,
+        bleSliderValueForRow(0),
+        bleSliderValueForRow(Math.max(0, (bleScanViewState.rows || []).length - 1))
+      );
     }
 
     function rowPositionOnBleTimeScale(row, index, minIndex, maxIndex){
@@ -7068,6 +7221,7 @@
       const currentLabel = document.getElementById('cmdqTimeCurrentLabel');
       const scaleLabel = document.getElementById('cmdqTimeScaleLabel');
       const resetBtn = document.getElementById('cmdqTimeResetScaleBtn');
+      const resetSelectionBtn = document.getElementById('cmdqTimeResetSelectionBtn');
       if(startLabel) startLabel.textContent = formatTimeRangeLabel(rows[0]?.timestamp_local);
       if(endLabel) endLabel.textContent = formatTimeRangeLabel(rows[rows.length - 1]?.timestamp_local);
       updateTimeSliderSummary(currentLabel, `${rows.length}/${visible.total} records`);
@@ -7076,7 +7230,8 @@
           ? 'Viewing full range'
           : `Selected range: ${formatTimeRangeLabel(rows[0]?.timestamp_local)} to ${formatTimeRangeLabel(rows[rows.length - 1]?.timestamp_local)}`;
       }
-      setTimeSliderResetState(resetBtn, !isCmdqTimeFullSelection());
+      setTimeSliderResetState(resetBtn, false);
+      setTimeSelectionResetState(resetSelectionBtn, document.getElementById('cmdqTimeStartSlider'), document.getElementById('cmdqTimeEndSlider'));
       updateCmdqTimeRangeVisual();
     }
 
@@ -7184,6 +7339,7 @@
         const startSlider = document.getElementById('cmdqTimeStartSlider');
         const endSlider = document.getElementById('cmdqTimeEndSlider');
         const resetBtn = document.getElementById('cmdqTimeResetScaleBtn');
+        const resetSelectionBtn = document.getElementById('cmdqTimeResetSelectionBtn');
         if(sliderWrapper) sliderWrapper.style.display = 'block';
         if(startSlider && endSlider){
           startSlider.min = endSlider.min = '0';
@@ -7201,8 +7357,9 @@
           };
         }
         if(resetBtn){
-          resetBtn.onclick = resetCmdqTimeRange;
+          resetBtn.onclick = null;
         }
+        if(resetSelectionBtn) resetSelectionBtn.onclick = resetCmdqTimeRange;
         renderCmdqView();
         panel.style.display = 'block';
       }catch(err){
