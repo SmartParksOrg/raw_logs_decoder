@@ -103,7 +103,50 @@
     #mapMessage { margin-top:10px; }
     #mapMessage:empty, #mapMetrics:empty{ display:none; }
     #analyticsTimeSliderWrapper, #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper, #logTimeSliderWrapper, #bleTimeSliderWrapper{ margin-top:12px; }
-    #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels{ display:flex; justify-content:space-between; gap:12px; margin-top:4px; flex-wrap:wrap; }
+    #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels{
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
+      gap:8px 12px;
+      margin-top:8px;
+    }
+    .time-slider-summary{
+      order:-1;
+      grid-column:1 / -1;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+      color:var(--text);
+      font-weight:700;
+    }
+    .time-slider-summary::before{
+      content:"Showing";
+      color:var(--muted);
+      font-size:11px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .time-slider-bound{
+      min-width:0;
+      display:grid;
+      gap:3px;
+      color:var(--text);
+      font-size:12px;
+      font-variant-numeric:tabular-nums;
+    }
+    .time-slider-bound::before{
+      color:var(--muted);
+      font-size:10px;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .time-slider-bound.from::before{ content:"From"; }
+    .time-slider-bound.to{
+      text-align:right;
+    }
+    .time-slider-bound.to::before{ content:"To"; }
     .time-slider-row{
       display:grid;
       grid-template-columns:minmax(0, 1fr) auto;
@@ -132,6 +175,10 @@
       place-items:center;
       cursor:pointer;
     }
+    .time-scale-reset::after{
+      content:attr(data-short-label);
+      display:none;
+    }
     .time-scale-reset svg{ width:16px; height:16px; stroke:currentColor; }
     .time-scale-reset:disabled{
       opacity:.35;
@@ -148,11 +195,42 @@
       z-index:1;
     }
     .dual-range input[type="range"]{ z-index:2; }
-    #analyticsTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.32); }
-    #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:rgba(15,118,110,.32); }
-    #accelerometerTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.32); }
-    #logTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.32); }
-    #bleTimeRangeSlider{ --range-selected-color:rgba(22,163,74,.32); }
+    #analyticsTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.55); }
+    #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:rgba(15,118,110,.55); }
+    #accelerometerTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.55); }
+    #logTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.55); }
+    #bleTimeRangeSlider{ --range-selected-color:rgba(22,163,74,.55); }
+    #cmdqTimeRangeSlider{ --range-selected-color:rgba(249,115,22,.55); }
+    @media (max-width:680px){
+      #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels{
+        grid-template-columns:1fr;
+      }
+      .time-slider-summary{
+        display:grid;
+        gap:2px;
+        justify-content:stretch;
+      }
+      .time-slider-bound.to{
+        text-align:left;
+      }
+      .time-slider-row{
+        grid-template-columns:minmax(0, 1fr);
+      }
+      .time-scale-reset{
+        width:auto;
+        min-height:34px;
+        padding:0 10px;
+        display:inline-flex;
+        justify-content:center;
+        gap:6px;
+        justify-self:start;
+      }
+      .time-scale-reset::after{
+        display:inline;
+        font-size:12px;
+        font-weight:700;
+      }
+    }
     .map-latest-legend{ display:flex; align-items:center; gap:6px; }
     .map-latest-dot{ width:12px; height:12px; border-radius:50%; background:#ff8c00; border:2px solid #fff; }
     .map-legend-control{
@@ -437,27 +515,29 @@
     #yRangeSlider{
       --range-selected-color:rgba(249,115,22,.34);
     }
-    .dual-range{ position:relative; height:28px; --range-start:0%; --range-end:100%; }
+    .dual-range{ position:relative; height:32px; --range-start:0%; --range-end:100%; }
     .dual-range-track{
-      position:absolute; left:0; right:0; top:12px; height:4px; border-radius:999px;
+      position:absolute; left:0; right:0; top:14px; height:5px; border-radius:999px;
       background:linear-gradient(to right,
-        rgba(255,255,255,.18) 0 var(--range-start),
+        rgba(255,255,255,.14) 0 var(--range-start),
         var(--range-selected-color, var(--brand)) var(--range-start) var(--range-end),
-        rgba(255,255,255,.18) var(--range-end) 100%);
+        rgba(255,255,255,.14) var(--range-end) 100%);
     }
     .dual-range input[type="range"]{
-      position:absolute; left:0; top:0; width:100%; height:28px; margin:0;
+      position:absolute; left:0; top:-6px; width:100%; height:44px; margin:0;
       appearance:none; -webkit-appearance:none; background:transparent; pointer-events:none;
     }
     .dual-range input[type="range"]::-webkit-slider-runnable-track{ height:4px; background:transparent; }
     .dual-range input[type="range"]::-moz-range-track{ height:4px; background:transparent; }
     .dual-range input[type="range"]::-webkit-slider-thumb{
-      appearance:none; -webkit-appearance:none; width:18px; height:18px; margin-top:-7px;
+      appearance:none; -webkit-appearance:none; width:20px; height:20px; margin-top:-8px;
       border:2px solid var(--brand); border-radius:50%; background:var(--bg-elev); cursor:pointer; pointer-events:auto;
+      box-shadow:0 2px 8px rgba(0,0,0,.24);
     }
     .dual-range input[type="range"]::-moz-range-thumb{
-      width:18px; height:18px; border:2px solid var(--brand); border-radius:50%;
+      width:20px; height:20px; border:2px solid var(--brand); border-radius:50%;
       background:var(--bg-elev); cursor:pointer; pointer-events:auto;
+      box-shadow:0 2px 8px rgba(0,0,0,.24);
     }
     .dual-range input[type="range"]:focus-visible::-webkit-slider-thumb{ outline:2px solid #fff; outline-offset:2px; }
     .dual-range input[type="range"]:focus-visible::-moz-range-thumb{ outline:2px solid #fff; outline-offset:2px; }
@@ -1115,7 +1195,7 @@
                 <input id="analyticsTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Analytics start time" />
                 <input id="analyticsTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Analytics end time" />
               </div>
-              <button type="button" id="analyticsTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+              <button type="button" id="analyticsTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                   <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -1123,9 +1203,9 @@
               </button>
             </div>
             <div id="analyticsTimeSliderLabels" class="dim">
-              <span id="analyticsTimeStartLabel"></span>
+              <span id="analyticsTimeStartLabel" class="time-slider-bound from"></span>
               <strong id="analyticsTimeCurrentLabel"></strong>
-              <span id="analyticsTimeEndLabel"></span>
+              <span id="analyticsTimeEndLabel" class="time-slider-bound to"></span>
             </div>
             <div class="time-scale-row">
               <span id="analyticsTimeScaleLabel" class="dim"></span>
@@ -1187,7 +1267,7 @@
                   <input id="mapFullscreenTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map start time" />
                   <input id="mapFullscreenTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Fullscreen map end time" />
                 </div>
-                <button type="button" id="mapFullscreenTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+                <button type="button" id="mapFullscreenTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
                   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                     <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -1210,7 +1290,7 @@
                 <input id="mapTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map start time" />
                 <input id="mapTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Map end time" />
               </div>
-              <button type="button" id="mapTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+              <button type="button" id="mapTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                   <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -1218,9 +1298,9 @@
               </button>
             </div>
             <div id="mapTimeSliderLabels" class="dim">
-              <span id="mapTimeStartLabel"></span>
+              <span id="mapTimeStartLabel" class="time-slider-bound from"></span>
               <strong id="mapTimeCurrentLabel"></strong>
-              <span id="mapTimeEndLabel"></span>
+              <span id="mapTimeEndLabel" class="time-slider-bound to"></span>
             </div>
             <div class="time-scale-row">
               <span id="mapTimeScaleLabel" class="dim"></span>
@@ -1251,7 +1331,7 @@
                 <input id="accelerometerTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer start time" />
                 <input id="accelerometerTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Accelerometer end time" />
               </div>
-              <button type="button" id="accelerometerTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+              <button type="button" id="accelerometerTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                   <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -1259,9 +1339,9 @@
               </button>
             </div>
             <div id="accelerometerTimeSliderLabels" class="dim">
-              <span id="accelerometerTimeStartLabel"></span>
+              <span id="accelerometerTimeStartLabel" class="time-slider-bound from"></span>
               <strong id="accelerometerTimeCurrentLabel"></strong>
-              <span id="accelerometerTimeEndLabel"></span>
+              <span id="accelerometerTimeEndLabel" class="time-slider-bound to"></span>
             </div>
             <div class="time-scale-row">
               <span id="accelerometerTimeScaleLabel" class="dim"></span>
@@ -1288,7 +1368,7 @@
                 <input id="bleTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="BLE scan start time" />
                 <input id="bleTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="BLE scan end time" />
               </div>
-              <button type="button" id="bleTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+              <button type="button" id="bleTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                   <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -1296,9 +1376,9 @@
               </button>
             </div>
             <div id="bleTimeSliderLabels" class="dim">
-              <span id="bleTimeStartLabel"></span>
+              <span id="bleTimeStartLabel" class="time-slider-bound from"></span>
               <strong id="bleTimeCurrentLabel"></strong>
-              <span id="bleTimeEndLabel"></span>
+              <span id="bleTimeEndLabel" class="time-slider-bound to"></span>
             </div>
             <div class="time-scale-row">
               <span id="bleTimeScaleLabel" class="dim"></span>
@@ -1321,15 +1401,26 @@
           <div id="cmdqSummary" class="metric-strip"></div>
           <div id="cmdqTimeSliderWrapper" style="display:none;">
             <label>CMDQ time range</label>
-            <div class="dual-range" id="cmdqTimeRangeSlider">
-              <div class="dual-range-track"></div>
-              <input id="cmdqTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ start time" />
-              <input id="cmdqTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ end time" />
+            <div class="time-slider-row">
+              <div class="dual-range" id="cmdqTimeRangeSlider">
+                <div class="dual-range-track"></div>
+                <input id="cmdqTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ start time" />
+                <input id="cmdqTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="CMDQ end time" />
+              </div>
+              <button type="button" id="cmdqTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
             </div>
             <div id="cmdqTimeSliderLabels" class="dim">
-              <span id="cmdqTimeStartLabel"></span>
+              <span id="cmdqTimeStartLabel" class="time-slider-bound from"></span>
               <strong id="cmdqTimeCurrentLabel"></strong>
-              <span id="cmdqTimeEndLabel"></span>
+              <span id="cmdqTimeEndLabel" class="time-slider-bound to"></span>
+            </div>
+            <div class="time-scale-row">
+              <span id="cmdqTimeScaleLabel" class="dim"></span>
             </div>
           </div>
           <div id="cmdqTabs" class="tab-bar" role="tablist" aria-label="CMDQ dashboard views" style="display:none;">
@@ -1358,7 +1449,7 @@
               <input id="logTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Log message start time" />
               <input id="logTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="Log message end time" />
             </div>
-            <button type="button" id="logTimeResetScaleBtn" class="time-scale-reset" title="Reset slider scale" aria-label="Reset slider scale">
+            <button type="button" id="logTimeResetScaleBtn" class="time-scale-reset" title="Full range" aria-label="Full range" data-short-label="Full range">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
                 <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -1366,9 +1457,9 @@
             </button>
           </div>
           <div id="logTimeSliderLabels" class="dim">
-            <span id="logTimeStartLabel"></span>
+            <span id="logTimeStartLabel" class="time-slider-bound from"></span>
             <strong id="logTimeCurrentLabel"></strong>
-            <span id="logTimeEndLabel"></span>
+            <span id="logTimeEndLabel" class="time-slider-bound to"></span>
           </div>
           <div class="time-scale-row">
             <span id="logTimeScaleLabel" class="dim"></span>
@@ -1761,6 +1852,39 @@
       return timestampMs == null ? "(unknown)" : new Date(timestampMs).toLocaleString();
     }
 
+    function formatTimeRangeLabel(value, options={}){
+      if(value == null || value === "" || value === "Unknown time") return "Unknown time";
+      const timestampMs = typeof value === "number" ? value : Date.parse(value);
+      if(!Number.isFinite(timestampMs)) return value || "Unknown time";
+      const compact = window.matchMedia && window.matchMedia("(max-width: 680px)").matches;
+      if(compact){
+        return new Intl.DateTimeFormat(undefined, {
+          month:"short",
+          day:"numeric",
+          hour:"numeric",
+          minute:"2-digit"
+        }).format(new Date(timestampMs));
+      }
+      return new Date(timestampMs).toLocaleString();
+    }
+
+    function updateTimeSliderSummary(currentLabel, text){
+      if(!currentLabel) return;
+      currentLabel.textContent = text;
+      currentLabel.classList.add("time-slider-summary");
+    }
+
+    function setTimeSliderResetState(resetBtn, enabled){
+      if(!resetBtn) return;
+      resetBtn.disabled = !enabled;
+      resetBtn.title = "Full range";
+      resetBtn.setAttribute("aria-label", "Full range");
+    }
+
+    function formatTimeSliderScaleLabel(isFullScale, startText, endText){
+      return isFullScale ? "Viewing full range" : `Zoomed range: ${startText} to ${endText}`;
+    }
+
     function logTimestampSorter(a, b, aRow, bRow, column, dir){
       const aTime = aRow && aRow.getData ? aRow.getData().timestampSort : null;
       const bTime = bRow && bRow.getData ? bRow.getData().timestampSort : null;
@@ -2047,15 +2171,19 @@
         if(!start || !end) return;
         const startValue = Number(start.value);
         const endValue = Number(end.value);
-        if(startLabel) startLabel.textContent = Number.isFinite(startValue) ? new Date(startValue).toLocaleString() : "Unknown time";
-        if(endLabel) endLabel.textContent = Number.isFinite(endValue) ? new Date(endValue).toLocaleString() : "Unknown time";
-        if(currentLabel) currentLabel.textContent = `${getLogTimeVisibleCount()}/${flatRows.length} messages`;
+        const startText = Number.isFinite(startValue) ? formatTimeRangeLabel(startValue) : "Unknown time";
+        const endText = Number.isFinite(endValue) ? formatTimeRangeLabel(endValue) : "Unknown time";
+        if(startLabel) startLabel.textContent = startText;
+        if(endLabel) endLabel.textContent = endText;
+        updateTimeSliderSummary(currentLabel, `${getLogTimeVisibleCount()}/${flatRows.length} messages`);
         if(scaleLabel){
-          scaleLabel.textContent = isLogTimeFullRange()
-            ? "Slider scale: full range"
-            : `Slider scale: ${new Date(logTimeValueAt(logTimeState.scaleMinIndex)).toLocaleString()} to ${new Date(logTimeValueAt(logTimeState.scaleMaxIndex)).toLocaleString()}`;
+          scaleLabel.textContent = formatTimeSliderScaleLabel(
+            isLogTimeFullRange(),
+            formatTimeRangeLabel(logTimeValueAt(logTimeState.scaleMinIndex)),
+            formatTimeRangeLabel(logTimeValueAt(logTimeState.scaleMaxIndex))
+          );
         }
-        if(reset) reset.disabled = isLogTimeFullRange() && isLogTimeSelectionFullScale();
+        setTimeSliderResetState(reset, !(isLogTimeFullRange() && isLogTimeSelectionFullScale()));
         updateLogTimeRangeVisual();
       }
 
@@ -3056,16 +3184,20 @@
       const visible = getAnalyticsVisibleRows();
       const startValue = Number(start.value);
       const endValue = Number(end.value);
-      if(startLabel) startLabel.textContent = Number.isFinite(startValue) ? new Date(startValue).toLocaleString() : 'Unknown time';
-      if(endLabel) endLabel.textContent = Number.isFinite(endValue) ? new Date(endValue).toLocaleString() : 'Unknown time';
-      if(currentLabel) currentLabel.textContent = `${visible.rows.length}/${visible.total} records`;
+      const startText = Number.isFinite(startValue) ? formatTimeRangeLabel(startValue) : 'Unknown time';
+      const endText = Number.isFinite(endValue) ? formatTimeRangeLabel(endValue) : 'Unknown time';
+      if(startLabel) startLabel.textContent = startText;
+      if(endLabel) endLabel.textContent = endText;
+      updateTimeSliderSummary(currentLabel, `${visible.rows.length}/${visible.total} records`);
       if(scaleLabel){
         const { minIndex, maxIndex } = getAnalyticsTimeSliderScaleIndexes();
-        scaleLabel.textContent = isAnalyticsTimeFullScale()
-          ? 'Slider scale: full range'
-          : `Slider scale: ${new Date(analyticsTimeValueAt(minIndex)).toLocaleString()} to ${new Date(analyticsTimeValueAt(maxIndex)).toLocaleString()}`;
+        scaleLabel.textContent = formatTimeSliderScaleLabel(
+          isAnalyticsTimeFullScale(),
+          formatTimeRangeLabel(analyticsTimeValueAt(minIndex)),
+          formatTimeRangeLabel(analyticsTimeValueAt(maxIndex))
+        );
       }
-      if(reset) reset.disabled = isAnalyticsTimeFullScale() && isAnalyticsTimeSelectionFullScale();
+      setTimeSliderResetState(reset, !(isAnalyticsTimeFullScale() && isAnalyticsTimeSelectionFullScale()));
       updateAnalyticsTimeRangeVisual();
     }
 
@@ -5060,7 +5192,7 @@
       const endSlider = document.getElementById('mapTimeEndSlider');
       if(!mapViewState || !startSlider || !endSlider){
         if(label) label.textContent = '';
-        resetBtns.forEach(btn => { btn.disabled = true; });
+        resetBtns.forEach(btn => setTimeSliderResetState(btn, false));
         return;
       }
 
@@ -5072,12 +5204,13 @@
       const scaleEnd = points[maxIndex];
 
       if(label){
-        const scaleText = isFullScale
-          ? 'Slider scale: full range'
-          : `Slider scale: ${scaleStart?.tsLabel || 'Unknown time'} to ${scaleEnd?.tsLabel || 'Unknown time'}`;
-        label.textContent = scaleText;
+        label.textContent = formatTimeSliderScaleLabel(
+          isFullScale,
+          formatTimeRangeLabel(scaleStart?.tsLabel),
+          formatTimeRangeLabel(scaleEnd?.tsLabel)
+        );
       }
-      resetBtns.forEach(btn => { btn.disabled = isFullScale; });
+      resetBtns.forEach(btn => setTimeSliderResetState(btn, !isFullScale));
     }
 
     function syncMapFullscreenSlidersFromMain(){
@@ -5245,13 +5378,13 @@
       const fsStartLabel = document.getElementById('mapFullscreenTimeStartLabel');
       const fsEndLabel = document.getElementById('mapFullscreenTimeEndLabel');
       const fsCurrentLabel = document.getElementById('mapFullscreenTimeCurrentLabel');
-      if(startLabel) startLabel.textContent = visiblePoints[0]?.tsLabel || 'Unknown time';
-      if(endLabel) endLabel.textContent = latestPoint?.tsLabel || 'Unknown time';
-      if(currentLabel){
-        currentLabel.textContent = `${visiblePoints.length}/${visible.total} points`;
-      }
-      if(fsStartLabel) fsStartLabel.textContent = visiblePoints[0]?.tsLabel || 'Unknown time';
-      if(fsEndLabel) fsEndLabel.textContent = latestPoint?.tsLabel || 'Unknown time';
+      const startText = formatTimeRangeLabel(visiblePoints[0]?.tsLabel);
+      const endText = formatTimeRangeLabel(latestPoint?.tsLabel);
+      if(startLabel) startLabel.textContent = startText;
+      if(endLabel) endLabel.textContent = endText;
+      updateTimeSliderSummary(currentLabel, `${visiblePoints.length}/${visible.total} points`);
+      if(fsStartLabel) fsStartLabel.textContent = startText;
+      if(fsEndLabel) fsEndLabel.textContent = endText;
       if(fsCurrentLabel) fsCurrentLabel.textContent = `${visiblePoints.length}/${visible.total} points`;
       syncMapFullscreenSlidersFromMain();
       updateMapTimeRangeVisual();
@@ -5825,7 +5958,7 @@
       const endSlider = document.getElementById('accelerometerTimeEndSlider');
       if(!accelerometerViewState || !startSlider || !endSlider){
         if(label) label.textContent = '';
-        if(resetBtn) resetBtn.disabled = true;
+        setTimeSliderResetState(resetBtn, false);
         return;
       }
 
@@ -5837,11 +5970,13 @@
       const scaleEnd = rows[maxIndex];
 
       if(label){
-        label.textContent = isFullScale
-          ? 'Slider scale: full range'
-          : `Slider scale: ${scaleStart?.timestamp_local || 'Unknown time'} to ${scaleEnd?.timestamp_local || 'Unknown time'}`;
+        label.textContent = formatTimeSliderScaleLabel(
+          isFullScale,
+          formatTimeRangeLabel(scaleStart?.timestamp_local),
+          formatTimeRangeLabel(scaleEnd?.timestamp_local)
+        );
       }
-      if(resetBtn) resetBtn.disabled = isFullScale;
+      setTimeSliderResetState(resetBtn, !isFullScale);
     }
 
     function rowPositionOnAccelerometerTimeScale(row, index, minIndex, maxIndex){
@@ -5962,9 +6097,9 @@
       const startLabel = document.getElementById('accelerometerTimeStartLabel');
       const endLabel = document.getElementById('accelerometerTimeEndLabel');
       const currentLabel = document.getElementById('accelerometerTimeCurrentLabel');
-      if(startLabel) startLabel.textContent = rows[0]?.timestamp_local || 'Unknown time';
-      if(endLabel) endLabel.textContent = rows[rows.length - 1]?.timestamp_local || 'Unknown time';
-      if(currentLabel) currentLabel.textContent = `${rows.length}/${visible.total} records`;
+      if(startLabel) startLabel.textContent = formatTimeRangeLabel(rows[0]?.timestamp_local);
+      if(endLabel) endLabel.textContent = formatTimeRangeLabel(rows[rows.length - 1]?.timestamp_local);
+      updateTimeSliderSummary(currentLabel, `${rows.length}/${visible.total} records`);
       updateAccelerometerTimeRangeVisual();
       updateAccelerometerSliderScaleControls();
     }
@@ -6175,7 +6310,7 @@
       const endSlider = document.getElementById('bleTimeEndSlider');
       if(!bleScanViewState || !startSlider || !endSlider){
         if(label) label.textContent = '';
-        if(resetBtn) resetBtn.disabled = true;
+        setTimeSliderResetState(resetBtn, false);
         return;
       }
 
@@ -6187,11 +6322,13 @@
       const scaleEnd = rows[maxIndex];
 
       if(label){
-        label.textContent = isFullScale
-          ? 'Slider scale: full range'
-          : `Slider scale: ${scaleStart?.timestamp_local || 'Unknown time'} to ${scaleEnd?.timestamp_local || 'Unknown time'}`;
+        label.textContent = formatTimeSliderScaleLabel(
+          isFullScale,
+          formatTimeRangeLabel(scaleStart?.timestamp_local),
+          formatTimeRangeLabel(scaleEnd?.timestamp_local)
+        );
       }
-      if(resetBtn) resetBtn.disabled = isFullScale;
+      setTimeSliderResetState(resetBtn, !isFullScale);
     }
 
     function rowPositionOnBleTimeScale(row, index, minIndex, maxIndex){
@@ -6309,9 +6446,9 @@
       const startLabel = document.getElementById('bleTimeStartLabel');
       const endLabel = document.getElementById('bleTimeEndLabel');
       const currentLabel = document.getElementById('bleTimeCurrentLabel');
-      if(startLabel) startLabel.textContent = rows[0]?.timestamp_local || 'Unknown time';
-      if(endLabel) endLabel.textContent = rows[rows.length - 1]?.timestamp_local || 'Unknown time';
-      if(currentLabel) currentLabel.textContent = `${rows.length}/${visible.total} detections`;
+      if(startLabel) startLabel.textContent = formatTimeRangeLabel(rows[0]?.timestamp_local);
+      if(endLabel) endLabel.textContent = formatTimeRangeLabel(rows[rows.length - 1]?.timestamp_local);
+      updateTimeSliderSummary(currentLabel, `${rows.length}/${visible.total} detections`);
       updateBleTimeRangeVisual();
       updateBleSliderScaleControls();
     }
@@ -6839,6 +6976,22 @@
       rangeSlider.style.setProperty('--range-end', `${endPercent}%`);
     }
 
+    function isCmdqTimeFullSelection(){
+      const startSlider = document.getElementById('cmdqTimeStartSlider');
+      const endSlider = document.getElementById('cmdqTimeEndSlider');
+      if(!startSlider || !endSlider) return true;
+      return Number(startSlider.value) <= Number(startSlider.min) && Number(endSlider.value) >= Number(endSlider.max);
+    }
+
+    function resetCmdqTimeRange(){
+      const startSlider = document.getElementById('cmdqTimeStartSlider');
+      const endSlider = document.getElementById('cmdqTimeEndSlider');
+      if(!cmdqViewState || !startSlider || !endSlider) return;
+      startSlider.value = startSlider.min || '0';
+      endSlider.value = endSlider.max || String(Math.max(0, (cmdqViewState.rows || []).length - 1));
+      renderCmdqView();
+    }
+
     function getCmdqVisibleRows(){
       if(!cmdqViewState) return { rows: [], startIndex: 0, endIndex: 0, total: 0 };
       const rows = cmdqViewState.rows || [];
@@ -6856,9 +7009,17 @@
       const startLabel = document.getElementById('cmdqTimeStartLabel');
       const endLabel = document.getElementById('cmdqTimeEndLabel');
       const currentLabel = document.getElementById('cmdqTimeCurrentLabel');
-      if(startLabel) startLabel.textContent = rows[0]?.timestamp_local || 'Unknown time';
-      if(endLabel) endLabel.textContent = rows[rows.length - 1]?.timestamp_local || 'Unknown time';
-      if(currentLabel) currentLabel.textContent = `${rows.length}/${visible.total} records`;
+      const scaleLabel = document.getElementById('cmdqTimeScaleLabel');
+      const resetBtn = document.getElementById('cmdqTimeResetScaleBtn');
+      if(startLabel) startLabel.textContent = formatTimeRangeLabel(rows[0]?.timestamp_local);
+      if(endLabel) endLabel.textContent = formatTimeRangeLabel(rows[rows.length - 1]?.timestamp_local);
+      updateTimeSliderSummary(currentLabel, `${rows.length}/${visible.total} records`);
+      if(scaleLabel){
+        scaleLabel.textContent = isCmdqTimeFullSelection()
+          ? 'Viewing full range'
+          : `Selected range: ${formatTimeRangeLabel(rows[0]?.timestamp_local)} to ${formatTimeRangeLabel(rows[rows.length - 1]?.timestamp_local)}`;
+      }
+      setTimeSliderResetState(resetBtn, !isCmdqTimeFullSelection());
       updateCmdqTimeRangeVisual();
     }
 
@@ -6965,6 +7126,7 @@
         updateCmdqTabs();
         const startSlider = document.getElementById('cmdqTimeStartSlider');
         const endSlider = document.getElementById('cmdqTimeEndSlider');
+        const resetBtn = document.getElementById('cmdqTimeResetScaleBtn');
         if(sliderWrapper) sliderWrapper.style.display = 'block';
         if(startSlider && endSlider){
           startSlider.min = endSlider.min = '0';
@@ -6972,6 +7134,17 @@
           startSlider.value = '0';
           endSlider.value = endSlider.max;
           startSlider.disabled = endSlider.disabled = rows.length <= 1;
+          startSlider.oninput = () => {
+            constrainCmdqTimeRange('start');
+            renderCmdqView();
+          };
+          endSlider.oninput = () => {
+            constrainCmdqTimeRange('end');
+            renderCmdqView();
+          };
+        }
+        if(resetBtn){
+          resetBtn.onclick = resetCmdqTimeRange;
         }
         renderCmdqView();
         panel.style.display = 'block';
