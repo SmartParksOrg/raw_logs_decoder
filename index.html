@@ -674,8 +674,31 @@
       border-radius: 8px;
     }
 
-    .tabulator{ background: var(--bg-elev); border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
+    .tabulator{
+      background: var(--bg-elev);
+      border-radius: var(--radius);
+      border:1px solid rgba(255,255,255,.08);
+      max-width:100%;
+      overflow-x:auto;
+    }
     .tabulator .tabulator-header{ background:transparent; border-bottom:1px solid rgba(255,255,255,.08); }
+    .tabulator .tabulator-tableholder{
+      overflow-x:auto;
+    }
+    .tabulator .tabulator-footer{
+      overflow-x:auto;
+    }
+    .tabulator .tabulator-footer .tabulator-paginator{
+      display:flex;
+      align-items:center;
+      justify-content:flex-end;
+      gap:4px;
+      flex-wrap:wrap;
+      min-width:0;
+    }
+    .tabulator .tabulator-footer .tabulator-page-size{
+      max-width:100%;
+    }
     #map{ border-radius: var(--radius); border:1px solid rgba(255,255,255,.08); }
     #mapWrapper{
       background:transparent;
