@@ -173,13 +173,23 @@
       border-radius:6px;
       background:var(--bg-elev);
       color:var(--text);
-      width:30px;
-      height:28px;
+      width:34px;
+      height:34px;
       margin:0;
       padding:0;
-      display:grid;
+      display:inline-grid;
       place-items:center;
       cursor:pointer;
+      flex:0 0 auto;
+      box-sizing:border-box;
+      line-height:1;
+      transition:background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
+    }
+    .time-scale-reset:hover:not(:disabled),
+    .time-selection-reset:hover:not(:disabled){
+      background:#fff;
+      border-color:rgba(17,24,39,.28);
+      box-shadow:0 1px 4px rgba(17,24,39,.12);
     }
     .time-scale-reset::after,
     .time-selection-reset::after{
@@ -187,12 +197,12 @@
       display:none;
     }
     .time-scale-reset svg,
-    .time-selection-reset svg{ width:16px; height:16px; stroke:currentColor; }
-    .time-selection-reset .range-reset-icon{
-      font-size:14px;
-      line-height:1;
-      font-weight:900;
-      letter-spacing:-.08em;
+    .time-selection-reset svg{
+      width:17px;
+      height:17px;
+      stroke:currentColor;
+      display:block;
+      flex:0 0 auto;
     }
     .time-scale-reset:disabled,
     .time-selection-reset:disabled{
@@ -238,8 +248,10 @@
       .time-selection-reset{
         width:auto;
         min-height:34px;
+        height:34px;
         padding:0 10px;
         display:inline-flex;
+        align-items:center;
         justify-content:center;
         gap:6px;
       }
@@ -1259,7 +1271,10 @@
                   </svg>
                 </button>
                 <button type="button" id="analyticsTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
-                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1336,7 +1351,10 @@
                     </svg>
                   </button>
                   <button type="button" id="mapFullscreenTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
-                    <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                      <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
                   </button>
                 </div>
               </div>
@@ -1364,7 +1382,10 @@
                   </svg>
                 </button>
                 <button type="button" id="mapTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
-                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1410,7 +1431,10 @@
                   </svg>
                 </button>
                 <button type="button" id="accelerometerTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
-                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1452,7 +1476,10 @@
                   </svg>
                 </button>
                 <button type="button" id="bleTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
-                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1496,7 +1523,10 @@
                   </svg>
                 </button>
                 <button type="button" id="cmdqTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
-                  <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1543,7 +1573,10 @@
                 </svg>
               </button>
               <button type="button" id="logTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range">
-                <span class="range-reset-icon" aria-hidden="true">&lt;&gt;</span>
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
               </button>
             </div>
           </div>
