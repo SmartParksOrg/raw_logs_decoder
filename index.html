@@ -2404,7 +2404,14 @@
       return guessMessageTypeByFields(sampleObj) || 'unknown';
     }
 
-    function fmtNumber(val, prec){ if(!Number.isFinite(val)) return ""; if(prec!=null) return Number(val).toFixed(prec).replace(/\.?0+$/,''); const s=String(Number(val)); if(/[eE]/.test(s)) return Number(val).toFixed(10).replace(/\.?0+$/,''); return s; }
+    function fmtNumber(val, prec){
+      if(!Number.isFinite(val)) return "";
+      const trimDecimalZeros = str => str.includes('.') ? str.replace(/0+$/,'').replace(/\.$/,'') : str;
+      if(prec!=null) return trimDecimalZeros(Number(val).toFixed(prec));
+      const s=String(Number(val));
+      if(/[eE]/.test(s)) return trimDecimalZeros(Number(val).toFixed(10));
+      return s;
+    }
     function fmtInteger(val){ if(!Number.isFinite(val)) return ""; return String(Math.trunc(val)); }
     function csvEscape(value){ if(value==null) return ""; const str=String(value); return /[",\n]/.test(str) ? '"' + str.replace(/"/g,'""') + '"' : str; }
     function isPlainObject(v){ return v && typeof v === "object" && !Array.isArray(v); }
