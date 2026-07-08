@@ -378,14 +378,37 @@
     .map-layer-swatch.heatmap{ background:#f59e0b; }
     .map-layer-swatch.warnings{ background:#dc2626; }
     .map-speed-legend{
-      display:flex;
-      align-items:center;
-      gap:8px;
+      display:grid;
+      gap:5px;
       color:#16202c;
       font-size:12px;
+      min-width:180px;
+    }
+    .map-speed-legend-title{
+      font-size:10px;
+      font-weight:800;
+      color:#5b6678;
+      text-transform:uppercase;
+      letter-spacing:.04em;
+    }
+    .map-speed-legend-scale{
+      display:grid;
+      grid-template-columns:auto minmax(96px, 1fr) auto;
+      align-items:center;
+      gap:8px;
+    }
+    .map-speed-legend-value{
+      font-weight:800;
+      font-variant-numeric:tabular-nums;
+      white-space:nowrap;
+    }
+    .map-speed-legend-caption{
+      color:#5b6678;
+      font-size:10px;
+      font-weight:600;
     }
     .map-speed-gradient{
-      width:140px;
+      width:100%;
       height:10px;
       border-radius:999px;
       background:linear-gradient(90deg,#2563eb,#22c55e,#f59e0b,#dc2626);
@@ -473,6 +496,19 @@
       }
       .map-fullscreen-time-labels{
         font-size:10px;
+      }
+      #mapWrapper:fullscreen .leaflet-bottom.leaflet-left,
+      #mapWrapper:-webkit-full-screen .leaflet-bottom.leaflet-left{
+        bottom:150px;
+        z-index:1001;
+      }
+      #mapWrapper:fullscreen .map-legend-control,
+      #mapWrapper:-webkit-full-screen .map-legend-control{
+        max-width:calc(100vw - 24px);
+      }
+      #mapWrapper:fullscreen .map-speed-legend,
+      #mapWrapper:-webkit-full-screen .map-speed-legend{
+        min-width:min(240px, calc(100vw - 44px));
       }
     }
     #mapWrapper:fullscreen{
@@ -4456,10 +4492,11 @@
       return Number.isFinite(mapSpeedLimitKmh) && mapSpeedLimitKmh >= 0 ? mapSpeedLimitKmh : 50;
     }
 
-    function speedColorForKmh(speedKmh, maxSpeedKmh){
+    function speedColorForKmh(speedKmh, minSpeedKmh, maxSpeedKmh){
       if(!Number.isFinite(speedKmh)) return '#64748b';
-      const max = Number.isFinite(maxSpeedKmh) && maxSpeedKmh > 0 ? maxSpeedKmh : 1;
-      const ratio = Math.max(0, Math.min(1, speedKmh / max));
+      const min = Number.isFinite(minSpeedKmh) ? minSpeedKmh : 0;
+      const max = Number.isFinite(maxSpeedKmh) && maxSpeedKmh > min ? maxSpeedKmh : min + 1;
+      const ratio = Math.max(0, Math.min(1, (speedKmh - min) / (max - min)));
       if(ratio < 0.33){
         const t = ratio / 0.33;
         return interpolateHexColor('#2563eb', '#22c55e', t);
@@ -4924,6 +4961,7 @@
       const layers = getMapLayerVisibility();
       const sogPoints = getSogPoints(visiblePoints);
       const speeds = sogPoints.map(point => point.sogKmh).filter(Number.isFinite);
+      const minSpeed = speeds.length ? Math.min(...speeds) : null;
       const maxSpeed = speeds.length ? Math.max(...speeds) : null;
       const meanSpeed = speeds.length ? ss.mean(speeds) : null;
 
@@ -4932,7 +4970,7 @@
           const from = sogPoints[i - 1];
           const to = sogPoints[i];
           mapTrackLayer.addLayer(L.polyline([[from.lat, from.lon], [to.lat, to.lon]], {
-            color: speedColorForKmh(to.sogKmh, maxSpeed),
+            color: speedColorForKmh(to.sogKmh, minSpeed, maxSpeed),
             weight: 4,
             opacity: 0.82,
             renderer: mapCanvasRenderer
@@ -4944,7 +4982,7 @@
         sogPoints.forEach(point => {
           addClickableMapPoint(point, {
             radius: point.sogKmh === 0 ? 3 : 4,
-            fillColor: speedColorForKmh(point.sogKmh, maxSpeed),
+            fillColor: speedColorForKmh(point.sogKmh, minSpeed, maxSpeed),
             fillOpacity: point.sogKmh === 0 ? 0.45 : 0.82,
             color: '#ffffff',
             weight: 1,
@@ -4960,7 +4998,19 @@
         renderMetricTile('Stationary fixes', sogPoints.filter(point => point.sogKmh === 0).length, 'SOG = 0 km/h')
       ].join(''));
       setMapAnalysisNote('Active tracking uses reported SOG from port 2 messages in km/h. Track color runs from blue at low speed to red at the highest visible speed.');
-      setMapLegendHtml('<div class="map-speed-legend"><span>Low</span><span class="map-speed-gradient"></span><span>High</span></div>');
+      const legendMin = formatSpeedKmh(minSpeed);
+      const legendMax = formatSpeedKmh(maxSpeed);
+      setMapLegendHtml(`
+        <div class="map-speed-legend">
+          <div class="map-speed-legend-title">SOG color scale</div>
+          <div class="map-speed-legend-scale">
+            <span class="map-speed-legend-value">${legendMin}</span>
+            <span class="map-speed-gradient"></span>
+            <span class="map-speed-legend-value">${legendMax}</span>
+          </div>
+          <div class="map-speed-legend-caption">Min and max visible speed</div>
+        </div>
+      `);
       setMapStatsHtml('');
       renderGenericMapTable(sogPoints.map(point => ({
         timestamp: point.tsLabel,
