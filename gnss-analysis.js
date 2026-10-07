@@ -31,13 +31,6 @@
     });
   }
 
-  function parseRangeBound(value, timezone, end=false){
-    if(!value) return null;
-    const time = Date.parse(timezone === 'utc' ? `${value}Z` : value);
-    // datetime-local controls have second precision; include the entire end second.
-    return Number.isFinite(time) ? time + (end ? 999 : 0) : NaN;
-  }
-
   function filterAttempts(attempts, start, end){
     if(start == null && end == null) return attempts;
     return attempts.filter(row => row.timestampMs != null &&
@@ -80,7 +73,7 @@
     return buckets.map((rows, hour) => ({ hour, ...summarizeAttempts(rows) }));
   }
 
-  const state = { source:null, attempts:[], charts:[], table:null, hourly:[], fileName:'decoded', bound:false };
+  const state = { source:null, attempts:[], timed:[], range:null, charts:[], table:null, hourly:[], fileName:'decoded', bound:false };
   const byId = id => document.getElementById(id);
   const format = (value, suffix='') => Number.isFinite(value)
     ? `${Number(value.toFixed(1)).toLocaleString()}${suffix}` : '—';
@@ -101,8 +94,9 @@
     destroyViews();
     state.source = null;
     state.attempts = [];
-    byId('gnssStart').value = '';
-    byId('gnssEnd').value = '';
+    state.timed = [];
+    state.range = null;
+    byId('gnssTimeSliderWrapper').style.display = 'none';
     byId('gnssSummary').replaceChildren();
     byId('gnssCoverage').textContent = '';
     byId('gnssPanel').style.display = 'none';
@@ -254,20 +248,91 @@
     return byId('gnssTimezone').value === 'utc' ? 'UTC' : Intl.DateTimeFormat().resolvedOptions().timeZone;
   }
 
+  function isFullTimeSelection(){
+    const range = state.range;
+    return !range || (range.start <= range.fullMin && range.end >= range.fullMax);
+  }
+
+  function selectedAttempts(){
+    // Untimed attempts retain their place in full-range summary totals only.
+    return isFullTimeSelection() ? state.attempts : filterAttempts(state.attempts, state.range.start, state.range.end);
+  }
+
+  function drawTimeMarkers(){
+    if(!state.range) return;
+    const canvas = byId('gnssTimeMarkers');
+    const width = Math.max(1, Math.round(canvas.getBoundingClientRect().width));
+    const height = 28;
+    const dpr = root.devicePixelRatio || 1;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const { scaleMin, scaleMax, start, end } = state.range;
+    state.timed.forEach(row => {
+      const time = row.timestampMs;
+      if(time < scaleMin || time > scaleMax) return;
+      const ratio = scaleMax > scaleMin ? (time - scaleMin) / (scaleMax - scaleMin) : 0.5;
+      ctx.beginPath();
+      ctx.arc(ratio * width, height - 4, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = time >= start && time <= end ? 'rgba(249,115,22,.78)' : 'rgba(37,99,235,.28)';
+      ctx.fill();
+    });
+  }
+
+  function updateTimeSlider(){
+    const range = state.range;
+    byId('gnssTimeSliderWrapper').style.display = range ? 'block' : 'none';
+    if(!range) return;
+    const startSlider = byId('gnssTimeStartSlider');
+    const endSlider = byId('gnssTimeEndSlider');
+    [startSlider, endSlider].forEach(slider => {
+      slider.min = String(range.scaleMin);
+      slider.max = String(range.scaleMax);
+      slider.disabled = range.fullMin === range.fullMax;
+    });
+    startSlider.value = String(range.start);
+    endSlider.value = String(range.end);
+    const span = range.scaleMax - range.scaleMin;
+    const track = byId('gnssTimeRangeSlider');
+    track.style.setProperty('--range-start', `${span > 0 ? (range.start - range.scaleMin) / span * 100 : 0}%`);
+    track.style.setProperty('--range-end', `${span > 0 ? (range.end - range.scaleMin) / span * 100 : 100}%`);
+    const rows = selectedAttempts();
+    const timed = state.timed.filter(row => row.timestampMs >= range.start && row.timestampMs <= range.end);
+    const options = byId('gnssTimezone').value === 'utc' ? { timeZone:'UTC' } : {};
+    const dateLabel = time => root.formatTimeRangeLabel(time, options);
+    byId('gnssTimeRangeLabel').textContent = `GNSS time range (${timezoneLabel()})`;
+    byId('gnssTimeStartLabel').textContent = dateLabel(timed[0]?.timestampMs);
+    byId('gnssTimeEndLabel').textContent = dateLabel(timed[timed.length - 1]?.timestampMs);
+    root.updateTimeSliderSummary(byId('gnssTimeCurrentLabel'), `${rows.length}/${state.attempts.length} records`);
+    const fullScale = range.scaleMin === range.fullMin && range.scaleMax === range.fullMax;
+    byId('gnssTimeScaleLabel').textContent = root.formatTimeSliderScaleLabel(fullScale, dateLabel(range.scaleMin), dateLabel(range.scaleMax));
+    root.setTimeSliderResetState(byId('gnssTimeResetScaleBtn'), !fullScale);
+    root.setTimeSelectionResetState(byId('gnssTimeResetSelectionBtn'), startSlider, endSlider, range.fullMin, range.fullMax);
+    drawTimeMarkers();
+  }
+
+  function commitTimeSelection(){
+    const range = state.range;
+    if(!range) return;
+    const timed = state.timed.filter(row => row.timestampMs >= range.start && row.timestampMs <= range.end);
+    const first = timed[0]?.timestampMs;
+    const last = timed[timed.length - 1]?.timestampMs;
+    if(last > first){
+      range.scaleMin = range.start = first;
+      range.scaleMax = range.end = last;
+    }
+    renderView();
+  }
+
   function renderView(){
     if(!state.source) return;
     destroyViews();
     const timezone = byId('gnssTimezone').value;
     const label = timezoneLabel();
-    const start = parseRangeBound(byId('gnssStart').value, timezone);
-    const end = parseRangeBound(byId('gnssEnd').value, timezone, true);
     const coverage = byId('gnssCoverage');
-    if((start != null && !Number.isFinite(start)) || (end != null && !Number.isFinite(end)) || (start != null && end != null && start > end)){
-      byId('gnssSummary').replaceChildren();
-      coverage.textContent = 'Choose a valid date range with the start at or before the end.';
-      return;
-    }
-    const rows = filterAttempts(state.attempts, start, end);
+    updateTimeSlider();
+    const rows = selectedAttempts();
     renderSummary(rows);
     const timed = rows.filter(row => row.timestampMs != null);
     const missing = state.attempts.filter(row => row.timestampMs == null).length;
@@ -279,10 +344,10 @@
     const dateLabel = value => new Date(value).toLocaleString(undefined, timezone === 'utc' ? { timeZone:'UTC' } : {});
     coverage.textContent = `${rows.length} of ${state.attempts.length} records selected; ${timed.length} placed in hourly groups (${label}). ` +
       (timed.length ? `Recorded range: ${dateLabel(range[0])} – ${dateLabel(range[1])}. ` : '') +
-      `${missing} records have no usable timestamp; ${start != null || end != null ? 'excluded by the date filter' : 'included in summary totals only'}. ` +
+      `${missing} records have no usable timestamp; ${isFullTimeSelection() ? 'included in summary totals only' : 'excluded by the time filter'}. ` +
       'Hours combine all selected days. Rates use total successful / known outcomes, not an average of daily rates. Flash-log time is used when available; otherwise the reported fix time is used. Missing hourly rates and metrics are left blank.';
     if(!rows.length){
-      coverage.textContent = 'No GNSS records in the selected date range. ' + coverage.textContent;
+      coverage.textContent = 'No GNSS records in the selected time range. ' + coverage.textContent;
       return;
     }
     if(!timed.length) return;
@@ -321,27 +386,37 @@
     if(state.bound) return;
     state.bound = true;
     const update = () => root.RawLogsUI.runWithBusy('Updating GNSS performance', 'Grouping selected fix attempts...', renderView);
-    ['gnssStart', 'gnssEnd'].forEach(id => byId(id).addEventListener('change', update));
-    let previousTimezone = byId('gnssTimezone').value;
-    byId('gnssTimezone').addEventListener('change', () => {
-      const nextTimezone = byId('gnssTimezone').value;
-      // Preserve the selected instants when changing the display time zone.
-      ['gnssStart', 'gnssEnd'].forEach(id => {
-        const input = byId(id);
-        const time = parseRangeBound(input.value, previousTimezone);
-        if(time == null || !Number.isFinite(time)) return;
-        const date = new Date(time);
-        const wallTime = nextTimezone === 'utc' ? time : time - date.getTimezoneOffset() * 60000;
-        input.value = new Date(wallTime).toISOString().slice(0, 19);
+    ['start', 'end'].forEach(handle => {
+      const slider = byId(handle === 'start' ? 'gnssTimeStartSlider' : 'gnssTimeEndSlider');
+      slider.addEventListener('input', () => {
+        const range = state.range;
+        if(!range) return;
+        range[handle] = Number(slider.value);
+        if(range.start > range.end){
+          if(handle === 'start') range.end = range.start;
+          else range.start = range.end;
+        }
+        updateTimeSlider();
       });
-      previousTimezone = nextTimezone;
-      update();
+      slider.addEventListener('change', () => root.RawLogsUI.runWithBusy('Updating GNSS performance', 'Grouping selected fix attempts...', commitTimeSelection));
     });
-    byId('gnssResetRange').addEventListener('click', () => {
-      byId('gnssStart').value = '';
-      byId('gnssEnd').value = '';
-      update();
+    byId('gnssTimezone').addEventListener('change', update);
+    ['gnssTimeResetScaleBtn', 'gnssTimeResetSelectionBtn'].forEach(id => {
+      byId(id).addEventListener('click', () => {
+        const range = state.range;
+        if(!range) return;
+        range.scaleMin = range.fullMin;
+        range.scaleMax = range.fullMax;
+        if(id === 'gnssTimeResetSelectionBtn'){
+          range.start = range.fullMin;
+          range.end = range.fullMax;
+        }
+        update();
+      });
     });
+    new ResizeObserver(() => {
+      if(byId('gnssCard').open) updateTimeSlider();
+    }).observe(byId('gnssTimeRangeSlider'));
     byId('gnssExportCsv').addEventListener('click', () => {
       if(!state.hourly.length) return;
       const url = URL.createObjectURL(new Blob([exportHourlyCSV(state.hourly, timezoneLabel())], { type:'text/csv;charset=utf-8' }));
@@ -358,18 +433,23 @@
     byId('gnssPlaceholder').style.display = 'none';
     byId('gnssPanel').style.display = 'block';
     if(state.source === messageRows){
+      updateTimeSlider();
       state.charts.forEach(chart => chart.resize());
       if(state.table) state.table.redraw();
       return;
     }
     state.source = messageRows;
     state.attempts = collectAttempts(messageRows);
+    state.timed = state.attempts.filter(row => row.timestampMs != null).sort((a,b) => a.timestampMs - b.timestampMs);
+    const first = state.timed[0]?.timestampMs;
+    const last = state.timed[state.timed.length - 1]?.timestampMs;
+    state.range = state.timed.length ? { fullMin:first, fullMax:last, scaleMin:first, scaleMax:last, start:first, end:last } : null;
     state.fileName = fileName || 'decoded';
     renderView();
   }
 
   if(typeof module !== 'undefined' && module.exports){
-    module.exports = { collectAttempts, parseRangeBound, filterAttempts, summarizeAttempts, aggregateHourly, exportHourlyCSV };
+    module.exports = { collectAttempts, filterAttempts, summarizeAttempts, aggregateHourly, exportHourlyCSV };
   } else {
     root.RawLogsGNSS = { render, reset };
   }

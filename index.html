@@ -102,8 +102,8 @@
     #map { height: 380px; margin-top:0; border:1px solid #ddd; border-radius:8px; display:none; } /* hidden until valid data */
     #mapMessage { margin-top:10px; }
     #mapMessage:empty, #mapMetrics:empty{ display:none; }
-    #analyticsTimeSliderWrapper, #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper, #logTimeSliderWrapper, #bleTimeSliderWrapper{ margin-top:12px; }
-    #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels{
+    #analyticsTimeSliderWrapper, #mapTimeSliderWrapper, #accelerometerTimeSliderWrapper, #logTimeSliderWrapper, #bleTimeSliderWrapper, #gnssTimeSliderWrapper{ margin-top:12px; }
+    #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels, #gnssTimeSliderLabels{
       display:grid;
       grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);
       gap:8px 12px;
@@ -223,11 +223,12 @@
     #analyticsTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.55); }
     #mapTimeRangeSlider, #mapFullscreenTimeRangeSlider{ --range-selected-color:rgba(15,118,110,.55); }
     #accelerometerTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.55); }
+    #gnssTimeRangeSlider{ --range-selected-color:rgba(37,99,235,.55); }
     #logTimeRangeSlider{ --range-selected-color:rgba(90,167,255,.55); }
     #bleTimeRangeSlider{ --range-selected-color:rgba(22,163,74,.55); }
     #cmdqTimeRangeSlider{ --range-selected-color:rgba(249,115,22,.55); }
     @media (max-width:680px){
-      #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels{
+      #analyticsTimeSliderLabels, #mapTimeSliderLabels, #accelerometerTimeSliderLabels, #logTimeSliderLabels, #bleTimeSliderLabels, #cmdqTimeSliderLabels, #gnssTimeSliderLabels{
         grid-template-columns:1fr;
       }
       .time-slider-summary{
@@ -704,6 +705,7 @@
     #analyticsTimeSliderWrapper,
     #mapTimeSliderWrapper,
     #accelerometerTimeSliderWrapper,
+    #gnssTimeSliderWrapper,
     #bleTimeSliderWrapper,
     #cmdqTimeSliderWrapper,
     #logTimeSliderWrapper,
@@ -720,6 +722,7 @@
     #analyticsTimeSliderWrapper,
     #mapTimeSliderWrapper,
     #accelerometerTimeSliderWrapper,
+    #gnssTimeSliderWrapper,
     #bleTimeSliderWrapper,
     #cmdqTimeSliderWrapper,
     #logTimeSliderWrapper{
@@ -1315,18 +1318,37 @@
               <label for="gnssTimezone">Time zone for filters and hourly groups</label>
               <select id="gnssTimezone"><option value="utc">UTC</option><option value="local">Browser local time</option></select>
             </div>
-            <div class="control">
-              <label for="gnssStart">From (inclusive)</label>
-              <input type="datetime-local" id="gnssStart" step="1" />
+          </div>
+          <div id="gnssTimeSliderWrapper" style="display:none;">
+            <label id="gnssTimeRangeLabel">GNSS time range</label>
+            <div class="time-slider-row">
+              <div class="dual-range" id="gnssTimeRangeSlider">
+                <div class="dual-range-track"></div>
+                <canvas id="gnssTimeMarkers" class="time-marker-canvas" aria-hidden="true"></canvas>
+                <input id="gnssTimeStartSlider" type="range" min="0" max="0" step="1" value="0" aria-label="GNSS start time" />
+                <input id="gnssTimeEndSlider" type="range" min="0" max="0" step="1" value="0" aria-label="GNSS end time" />
+              </div>
+              <div class="time-slider-actions">
+                <button type="button" id="gnssTimeResetScaleBtn" class="time-scale-reset" title="Reset time scale" aria-label="Reset time scale" data-short-label="Scale" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 12a9 9 0 1 0 3-6.7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="M3 4v6h6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <button type="button" id="gnssTimeResetSelectionBtn" class="time-selection-reset" title="Reset selected range" aria-label="Reset selected range" data-short-label="Range" disabled>
+                  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M9 5 3 12l6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <path d="m15 5 6 7-6 7" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+              </div>
             </div>
-            <div class="control">
-              <label for="gnssEnd">To (inclusive)</label>
-              <input type="datetime-local" id="gnssEnd" step="1" />
+            <div id="gnssTimeSliderLabels" class="dim">
+              <span id="gnssTimeStartLabel" class="time-slider-bound from"></span>
+              <strong id="gnssTimeCurrentLabel" class="time-slider-summary"></strong>
+              <span id="gnssTimeEndLabel" class="time-slider-bound to"></span>
             </div>
-            <div class="control">
-              <label>Time range</label>
-              <button type="button" id="gnssResetRange" class="btn secondary">Show all dates</button>
-            </div>
+            <div class="time-scale-row"><span id="gnssTimeScaleLabel" class="dim"></span></div>
           </div>
           <p class="science-note">Each full u-blox location record (port 2, direct or inside a flash log) counts as one reported attempt, including failed records with zero coordinates. Success = 1; failure = 0. Other or missing outcomes are unknown and excluded from the success rate. Retry counters are analyzed separately; short locations and resends are excluded.</p>
           <p id="gnssCoverage" class="muted" role="status"></p>
@@ -2029,10 +2051,11 @@
           month:"short",
           day:"numeric",
           hour:"numeric",
-          minute:"2-digit"
+          minute:"2-digit",
+          ...options
         }).format(new Date(timestampMs));
       }
-      return new Date(timestampMs).toLocaleString();
+      return new Date(timestampMs).toLocaleString(undefined, options);
     }
 
     function updateTimeSliderSummary(currentLabel, text){

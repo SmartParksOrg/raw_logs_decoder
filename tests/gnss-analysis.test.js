@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const {
-  collectAttempts, parseRangeBound, filterAttempts, summarizeAttempts, aggregateHourly, exportHourlyCSV
+  collectAttempts, filterAttempts, summarizeAttempts, aggregateHourly, exportHourlyCSV
 } = require('../gnss-analysis.js');
 
 const row = (success, timestamp='2026-10-01T04:00:00Z', data={}) => ({
@@ -72,7 +72,7 @@ test('TTF and quality use successful fixes; retries use all outcomes and missing
   assert.equal(summarizeAttempts(collectAttempts([row(1)])).meanTtf, null);
 });
 
-test('date filters include boundaries and handle UTC/local hour and DST transitions', () => {
+test('time filters include exact boundaries and handle UTC/local hour and DST transitions', () => {
   const previous = process.env.TZ;
   process.env.TZ = 'Europe/Amsterdam';
   try{
@@ -80,15 +80,14 @@ test('date filters include boundaries and handle UTC/local hour and DST transiti
       row(1, '2026-10-25T00:30:00Z'), row(0, '2026-10-25T01:30:00Z'),
       row(1, '2026-10-25T01:30:00.500Z'), row(0, '')
     ]);
-    const start = parseRangeBound('2026-10-25T00:30:00', 'utc');
-    const end = parseRangeBound('2026-10-25T01:30:00', 'utc', true);
+    const start = Date.parse('2026-10-25T00:30:00Z');
+    const end = Date.parse('2026-10-25T01:30:00.500Z');
     assert.equal(filterAttempts(attempts, start, end).length, 3);
     assert.equal(filterAttempts(attempts, end, start).length, 0);
     assert.equal(aggregateHourly(attempts, 'utc')[0].successful, 1);
     assert.equal(aggregateHourly(attempts, 'local')[2].attempts, 3);
-    assert.equal(parseRangeBound('2026-10-01T06:00:00', 'local'), Date.parse('2026-10-01T04:00:00Z'));
-    assert.equal(parseRangeBound('', 'utc'), null);
-    assert.ok(Number.isNaN(parseRangeBound('bad date', 'utc')));
+    assert.equal(filterAttempts(attempts, end, end).length, 1);
+    assert.equal(filterAttempts(attempts, start + 1, end - 1).length, 1);
   } finally {
     if(previous === undefined) delete process.env.TZ;
     else process.env.TZ = previous;
