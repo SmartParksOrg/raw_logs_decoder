@@ -1667,7 +1667,8 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./app-ui.js"></script>
-  <script src="./gnss-analysis.js"></script>
+  <!-- Keep the GNSS cache key equal to the first 12 characters of its SHA-256 hash. -->
+  <script src="./gnss-analysis.js?v=8dd4d0047784"></script>
 
   <script>
     const versionLabel = document.getElementById("appVersion");

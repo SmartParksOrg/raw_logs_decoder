@@ -2,12 +2,21 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
+const { createHash } = require('node:crypto');
 const {
   collectAttempts, filterAttempts, summarizeAttempts, aggregateHourly, exportHourlyCSV
 } = require('../gnss-analysis.js');
 
 const row = (success, timestamp='2026-10-01T04:00:00Z', data={}) => ({
   port:2, source_port:29, timestamp_utc:timestamp, dataObj:{ success, ...data }
+});
+
+test('page uses a content-specific GNSS URL so cached scripts cannot target removed controls', () => {
+  const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  const script = fs.readFileSync(require.resolve('../gnss-analysis.js'));
+  const hash = createHash('sha256').update(script).digest('hex').slice(0, 12);
+  assert.ok(html.includes(`<script src="./gnss-analysis.js?v=${hash}"></script>`),
+    'Update the GNSS script cache key in index.html when its content changes');
 });
 
 test('counts full attempts, including failed zero coordinates; excludes short fixes and resends', () => {
