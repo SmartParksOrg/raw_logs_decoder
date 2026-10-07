@@ -1318,7 +1318,20 @@
               <label for="gnssTimezone">Time zone for filters and hourly groups</label>
               <select id="gnssTimezone"><option value="utc">UTC</option><option value="local">Browser local time</option></select>
             </div>
+            <div class="control">
+              <label for="gnssHotTimeout">Hot fix timeout (s)</label>
+              <input id="gnssHotTimeout" type="number" min="1" step="1" value="65" placeholder="Unknown" />
+            </div>
+            <div class="control">
+              <label for="gnssColdTimeout">Cold fix timeout (s)</label>
+              <input id="gnssColdTimeout" type="number" min="1" step="1" value="200" placeholder="Unknown" />
+            </div>
+            <div class="control">
+              <label for="gnssShortFailureLimit">Short failed attempt: up to (s)</label>
+              <input id="gnssShortFailureLimit" type="number" min="1" step="1" value="35" />
+            </div>
           </div>
+          <p class="science-note">Enter the hot and cold timeouts used by your device. The initial 65 / 200 s values are firmware defaults, not settings read from this log. The adjustable 35 s short-failure limit allows 5 s beyond a 30 s satellite check. Clear an unknown timeout rather than guessing.</p>
           <div id="gnssTimeSliderWrapper" style="display:none;">
             <label id="gnssTimeRangeLabel">GNSS time range</label>
             <div class="time-slider-row">
@@ -1350,13 +1363,20 @@
             </div>
             <div class="time-scale-row"><span id="gnssTimeScaleLabel" class="dim"></span></div>
           </div>
-          <p class="science-note">Each full u-blox location record (port 2, direct or inside a flash log) counts as one reported attempt, including failed records with zero coordinates. Success = 1; failure = 0. Other or missing outcomes are unknown and excluded from the success rate. Retry counters are analyzed separately; short locations and resends are excluded.</p>
+          <p class="science-note">Each full u-blox location record (port 2, direct or inside a flash log) counts as one reported attempt, including failed records with zero coordinates. Success = 1 / TRUE; failure = 0 / FALSE. Other or missing outcomes are unknown and excluded from the success rate. Retry counters are analyzed separately; short locations and resends are excluded.</p>
           <p id="gnssCoverage" class="muted" role="status"></p>
           <div id="gnssSummary" class="metric-strip"></div>
           <div id="gnssCharts" class="dashboard-grid full-width" style="margin-top:12px;"></div>
           <button type="button" id="gnssExportCsv" class="btn secondary" disabled>Export hourly CSV</button>
           <button type="button" id="gnssExportPng" class="btn secondary" disabled>Download fix chart (PNG)</button>
           <div id="gnssTable" style="margin-top:12px;"></div>
+          <div id="gnssFailuresPanel" style="display:none; margin-top:16px;">
+            <h3>Failed attempt analysis</h3>
+            <p id="gnssFailureNote" class="science-note"></p>
+            <div id="gnssFailureSummary" class="metric-strip"></div>
+            <button type="button" id="gnssExportFailures" class="btn secondary" disabled>Export failed attempts (CSV)</button>
+            <div id="gnssFailuresTable" style="margin-top:12px;"></div>
+          </div>
         </div>
       </div>
     </details>
@@ -1668,7 +1688,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./app-ui.js"></script>
   <!-- Keep the GNSS cache key equal to the first 12 characters of its SHA-256 hash. -->
-  <script src="./gnss-analysis.js?v=8dd4d0047784"></script>
+  <script src="./gnss-analysis.js?v=7bd787256356"></script>
 
   <script>
     const versionLabel = document.getElementById("appVersion");

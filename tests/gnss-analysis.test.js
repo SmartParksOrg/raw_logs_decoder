@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const { createHash } = require('node:crypto');
 const {
-  collectAttempts, filterAttempts, summarizeAttempts, aggregateHourly, exportHourlyCSV
+  collectAttempts, classifyFailure, filterAttempts, summarizeAttempts, aggregateHourly, exportHourlyCSV, exportFailuresCSV
 } = require('../gnss-analysis.js');
 
 const row = (success, timestamp='2026-10-01T04:00:00Z', data={}) => ({
@@ -30,11 +30,84 @@ test('counts full attempts, including failed zero coordinates; excludes short fi
 });
 
 test('unknown outcomes never become failures or dilute success rates', () => {
-  const attempts = collectAttempts([row(1), row(0), ...[undefined, null, '', ' ', 2, -1, 'invalid', false].map(value => row(value))]);
+  const attempts = collectAttempts([row(1), row(0), ...[undefined, null, '', ' ', 2, -1, 'invalid'].map(value => row(value))]);
   const summary = summarizeAttempts(attempts);
-  assert.equal(summary.unknown, 8);
+  assert.equal(summary.unknown, 7);
   assert.equal(summary.successRate, 50);
   assert.equal(summarizeAttempts(collectAttempts([row(null)])).successRate, null);
+});
+
+test('success flags accept boolean and text TRUE/FALSE without interpreting missing values as false', () => {
+  const summary = summarizeAttempts(collectAttempts([true, false, ' TRUE ', 'FALSE', '1', '0', null].map(value => row(value))));
+  assert.equal(summary.successful, 3);
+  assert.equal(summary.failed, 3);
+  assert.equal(summary.unknown, 1);
+  assert.equal(summary.successRate, 50);
+});
+
+test('short failures use separate inferred hot/cold timeouts; SIV zero is context, not the trigger', () => {
+  const settings = { hotTimeout:30, coldTimeout:200, shortLimit:35 };
+  const attempts = collectAttempts([
+    row(false, undefined, { ttf:32, hot_retry:1, cold_retry:0, SIV:0 }),
+    row(false, undefined, { ttf:32, hot_retry:5, cold_retry:1, SIV:2 }),
+    row(false, undefined, { ttf:25, hot_retry:1, cold_retry:0, SIV:0 }),
+    row(true, undefined, { ttf:10, hot_retry:0, cold_retry:0, SIV:0 }),
+    row(false, undefined, { ttf:200, cold_retry:1, SIV:0 })
+  ]);
+  assert.equal(classifyFailure(attempts[0], settings).category, 'other');
+  assert.equal(classifyFailure(attempts[1], settings).mode, 'cold');
+  assert.equal(classifyFailure(attempts[1], settings).category, 'early');
+  assert.equal(classifyFailure(attempts[2], settings).category, 'early');
+  assert.equal(classifyFailure(attempts[3], settings), null);
+  assert.equal(classifyFailure(attempts[4], settings).category, 'other');
+  const summary = summarizeAttempts(attempts, settings);
+  assert.equal(summary.earlyStops, 2);
+  assert.equal(summary.earlyZeroSiv, 1);
+  assert.equal(summary.failed, 4);
+  assert.equal(summary.otherFailed, 2);
+  assert.equal(summary.successRate, 20);
+  assert.equal(aggregateHourly(attempts, 'utc', settings)[4].earlyStops, 2);
+});
+
+test('unknown mode compares against both timeouts conservatively, and missing settings remain unconfirmed', () => {
+  const attempt = collectAttempts([row(false, undefined, { ttf:32, SIV:0 })])[0];
+  assert.equal(classifyFailure(attempt, { hotTimeout:65, coldTimeout:200, shortLimit:35 }).category, 'early');
+  assert.equal(classifyFailure(attempt, { hotTimeout:30, coldTimeout:200, shortLimit:35 }).category, 'other');
+  assert.equal(classifyFailure(attempt, { hotTimeout:null, coldTimeout:200, shortLimit:35 }).category, 'short');
+  assert.equal(classifyFailure({ ...attempt, hotRetry:1 }, { hotTimeout:65, coldTimeout:null, shortLimit:35 }).category, 'early');
+  assert.equal(classifyFailure(attempt, { hotTimeout:65, coldTimeout:200, shortLimit:null }).category, 'unassessed');
+});
+
+test('zero/missing TTF and active tracking do not masquerade as early stops', () => {
+  const attempts = collectAttempts([
+    ...[0, null, undefined, '', -1].map(ttf => row(false, undefined, { ttf, SIV:0 })),
+    ...[1, true, 'TRUE'].map(active_t => row(false, undefined, { ttf:10, active_t, SIV:0 }))
+  ]);
+  const summary = summarizeAttempts(attempts);
+  assert.equal(summary.failed, 8);
+  assert.equal(summary.earlyStops, 0);
+  assert.equal(summary.unassessedFailures, 8);
+});
+
+test('short-window and timeout-margin boundaries are inclusive and react to changed settings', () => {
+  const attempts = collectAttempts([25, 26, 35, 36].map(ttf => row(false, undefined, { ttf, hot_retry:1 })));
+  assert.equal(summarizeAttempts(attempts, { hotTimeout:30, coldTimeout:200, shortLimit:35 }).earlyStops, 1);
+  assert.equal(summarizeAttempts(attempts, { hotTimeout:65, coldTimeout:200, shortLimit:35 }).earlyStops, 3);
+  assert.equal(summarizeAttempts(attempts, { hotTimeout:65, coldTimeout:200, shortLimit:20 }).earlyStops, 0);
+});
+
+test('exports retain failure criteria and evidence for reproducible assessments', () => {
+  const settings = { hotTimeout:80, coldTimeout:240, shortLimit:40 };
+  const attempts = collectAttempts([row(false, undefined, { ttf:35, hot_retry:1, SIV:0 })]);
+  const hourlyCsv = exportHourlyCSV(aggregateHourly(attempts, 'utc', settings), 'UTC', settings);
+  assert.ok(hourlyCsv.includes('"Likely early stops"'));
+  assert.ok(hourlyCsv.split('\r\n')[5].endsWith('"80","240","40"'));
+  const result = classifyFailure(attempts[0], settings);
+  const csv = exportFailuresCSV([{ ...attempts[0], ...result, assessment:'Likely early stop' }], settings);
+  assert.ok(csv.includes('"SIV"'));
+  assert.ok(csv.includes('"Reference timeout (s)"'));
+  assert.ok(csv.includes('"Likely early stop","hot","35","0","80"'));
+  assert.ok(csv.endsWith('"80","240","40"'));
 });
 
 test('hourly rates are weighted by attempt count, not averaged across days', () => {
