@@ -915,6 +915,13 @@
       letter-spacing: 0;
     }
     .dashboard-chart{ height: 300px; position:relative; }
+    #gnssPanel .controls-grid{ grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
+    #gnssSummary{ grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); }
+    #gnssCharts .dashboard-panel:first-child .dashboard-chart{ height:400px; }
+    @media (max-width:680px){
+      #gnssSummary{ grid-template-columns:repeat(2, minmax(0, 1fr)); }
+      #gnssSummary .metric-value{ font-size:21px; overflow-wrap:anywhere; }
+    }
     .chart-loading{
       position:absolute;
       inset:0;
@@ -1297,6 +1304,41 @@
       </div>
     </details>
 
+    <!-- === GNSS PERFORMANCE SECTION === -->
+    <details id="gnssCard" class="card">
+      <summary><span class="chev">▸</span> GNSS Performance (u-blox)</summary>
+      <div class="section-body">
+        <p id="gnssPlaceholder" class="muted">Decode a log file to analyze GNSS fix attempts.</p>
+        <div id="gnssPanel" style="display:none;">
+          <div class="controls-grid">
+            <div class="control">
+              <label for="gnssTimezone">Time zone for filters and hourly groups</label>
+              <select id="gnssTimezone"><option value="utc">UTC</option><option value="local">Browser local time</option></select>
+            </div>
+            <div class="control">
+              <label for="gnssStart">From (inclusive)</label>
+              <input type="datetime-local" id="gnssStart" step="1" />
+            </div>
+            <div class="control">
+              <label for="gnssEnd">To (inclusive)</label>
+              <input type="datetime-local" id="gnssEnd" step="1" />
+            </div>
+            <div class="control">
+              <label>Time range</label>
+              <button type="button" id="gnssResetRange" class="btn secondary">Show all dates</button>
+            </div>
+          </div>
+          <p class="science-note">Each full u-blox location record (port 2, direct or inside a flash log) counts as one reported attempt, including failed records with zero coordinates. Success = 1; failure = 0. Other or missing outcomes are unknown and excluded from the success rate. Retry counters are analyzed separately; short locations and resends are excluded.</p>
+          <p id="gnssCoverage" class="muted" role="status"></p>
+          <div id="gnssSummary" class="metric-strip"></div>
+          <div id="gnssCharts" class="dashboard-grid full-width" style="margin-top:12px;"></div>
+          <button type="button" id="gnssExportCsv" class="btn secondary" disabled>Export hourly CSV</button>
+          <button type="button" id="gnssExportPng" class="btn secondary" disabled>Download fix chart (PNG)</button>
+          <div id="gnssTable" style="margin-top:12px;"></div>
+        </div>
+      </div>
+    </details>
+
     <!-- === MAP SECTION === -->
     <details id="mapCard" class="card">
       <summary><span class="chev">▸</span> Map</summary>
@@ -1603,6 +1645,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./app-ui.js"></script>
+  <script src="./gnss-analysis.js"></script>
 
   <script>
     const versionLabel = document.getElementById("appVersion");
@@ -2819,6 +2862,13 @@
       runWithRenderingBusy("Preparing analytics", "Building chart controls and default statistics...", () => ensureAnalyticsPrepared(shouldRenderDefault));
     }
 
+    function renderGnssIfNeeded(){
+      if(!hasDecodedResults()) return;
+      runWithRenderingBusy("Rendering GNSS performance", "Analyzing u-blox fix attempts and hourly success rates...", () => {
+        window.RawLogsGNSS.render(getMessageRows(), logFileName);
+      });
+    }
+
     function renderMapIfNeeded(force=false){
       if(!hasDecodedResults()) return;
       if(!force && mapViewState){
@@ -2870,6 +2920,7 @@
 
     function initLazyRendering(){
       bindLazyCard('analyticsCard', () => renderAnalyticsIfNeeded(true));
+      bindLazyCard('gnssCard', renderGnssIfNeeded);
       bindLazyCard('mapCard', () => renderMapIfNeeded(false));
       bindLazyCard('accelerometerCard', renderAccelerometerIfNeeded);
       bindLazyCard('bleScanCard', renderBleScanIfNeeded);
@@ -2964,6 +3015,7 @@
     let analysisRenderFrame = null;
 
     function resetRenderedViews(){
+      window.RawLogsGNSS.reset();
       if(chartRef){ try { chartRef.destroy(); } catch(e){} chartRef = null; }
       if(aggTableRef){ try { aggTableRef.destroy(); } catch(e){} aggTableRef = null; }
       if(outputTableRef){ try { outputTableRef.destroy(); } catch(e){} outputTableRef = null; }

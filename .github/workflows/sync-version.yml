@@ -7,6 +7,7 @@ on:
     paths:
       - "index.html"
       - "app-ui.js"
+      - "gnss-analysis.js"
       - "field-meta.json"
       - "ttn_decoder-v*.js"
       - "favicon.ico"
